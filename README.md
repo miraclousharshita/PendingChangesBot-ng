@@ -47,6 +47,13 @@ the steps below once per user account that will run PendingChangesBot:
    - Authorize the OAuth request for Superset. After approval you should be redirected
      to Superset's interface.
 
+## Running the database migrations
+
+```bash
+cd app
+python manage.py makemigrations
+python manage.py migrate
+```
 
 ## Running the application
 
