@@ -141,7 +141,7 @@ class ViewTests(TestCase):
             wikitext="",
             categories=[],
             superset_data={
-                "user_groups": ["editor", "autoreviewer"],
+                "user_groups": ["editor", "autoreviewer", "editor", "reviewer", "sysop", "bot"],
                 "change_tags": ["foo"],
                 "page_categories": ["Bar"],
                 "rc_bot": False,
@@ -261,7 +261,7 @@ class ViewTests(TestCase):
         page = PendingPage.objects.create(
             wiki=self.wiki,
             pageid=105,
-            title="Default Rights", 
+            title="Default Rights",
             stable_revid=1,
         )
         PendingRevision.objects.create(

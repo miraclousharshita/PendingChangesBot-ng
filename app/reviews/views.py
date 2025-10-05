@@ -195,7 +195,8 @@ def _build_revision_payload(revisions, wiki):
                     "is_autoreviewed": (
                         profile.is_autoreviewed
                         if profile
-                        else bool(group_set & {"autoreview", "autoreviewer"})
+                        else bool(group_set & {"autoreview", "autoreviewer", "editor",
+                                               "reviewer", "sysop", "bot"})
                     ),
                 },
             }

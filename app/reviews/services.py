@@ -49,13 +49,13 @@ class WikiClient:
             return []
 
         sql_query = f"""
-select
+SELECT
    page_title,
    page_namespace,
    page_is_redirect,
    fp_page_id,
    fp_pending_since,
-   fp_stable, 
+   fp_stable,
    rev_id,
    rev_timestamp,
    rev_len,
@@ -65,30 +65,30 @@ select
    comment_text,
    a.actor_name,
    a.actor_user,
-   group_concat(DISTINCT(ctd_name)) as change_tags,
-   group_concat(DISTINCT(ug_group)) as user_groups,
-   group_concat(DISTINCT(ufg_group)) as user_former_groups,
-   group_concat(DISTINCT(cl_to)) as page_categories,
+   group_concat(DISTINCT(ctd_name)) AS change_tags,
+   group_concat(DISTINCT(ug_group)) AS user_groups,
+   group_concat(DISTINCT(ufg_group)) AS user_former_groups,
+   group_concat(DISTINCT(cl_to)) AS page_categories,
    rc_bot,
    rc_patrolled
-from
-   (SELECT * FROM flaggedpages ORDER BY fp_pending_since DESC LIMIT {limit}) as fp,
-   revision as r
-       LEFT JOIN change_tag ON r.rev_id=ct_rev_id 
+FROM
+   (SELECT * FROM flaggedpages ORDER BY fp_pending_since DESC LIMIT {limit}) AS fp,
+   revision AS r
+       LEFT JOIN change_tag ON r.rev_id=ct_rev_id
        LEFT JOIN change_tag_def ON ct_tag_id = ctd_id
        LEFT JOIN recentchanges ON rc_this_oldid = r.rev_id AND rc_source="mw.edit"
-   , 
-   page as p
+   ,
+   page AS p
        LEFT JOIN categorylinks ON cl_from = page_id,
    comment_revision,
-   actor_revision as a
+   actor_revision AS a
    LEFT JOIN user_groups ON a.actor_user=ug_user
    LEFT JOIN user_former_groups ON a.actor_user=ufg_user
-where
-   fp_pending_since IS NOT NULL 
-   AND r.rev_page=fp_page_id 
-   AND page_id=fp_page_id 
-   and page_namespace=0 
+WHERE
+   fp_pending_since IS NOT NULL
+   AND r.rev_page=fp_page_id
+   AND page_id=fp_page_id
+   AND page_namespace=0
    AND r.rev_id>=fp_stable
    AND r.rev_actor=a.actor_id
    AND r.rev_comment_id=comment_id
@@ -213,11 +213,12 @@ ORDER BY fp_pending_since, rev_id DESC
         if not superset_data:
             return profile
 
+        autoreviewed_groups = {"autoreview", "autoreviewer", "editor", "reviewer", "sysop", "bot"}
         groups = sorted(superset_data.get("user_groups") or [])
         profile.usergroups = groups
         profile.is_bot = "bot" in groups or bool(superset_data.get("rc_bot"))
         profile.is_autopatrolled = "autopatrolled" in groups
-        profile.is_autoreviewed = bool({"autoreview", "autoreviewer"} & set(groups))
+        profile.is_autoreviewed = bool(autoreviewed_groups & set(groups))
         profile.is_blocked = bool(superset_data.get("user_blocked", False))
         profile.save(
             update_fields=[
