@@ -146,6 +146,7 @@ createApp({
       configurationOpen: loadConfigurationOpen(),
       reviewResults: {},
       runningReviews: {},
+      runningBulkReview: false,
     });
 
     const forms = reactive({
@@ -405,6 +406,31 @@ createApp({
       }
     }
 
+    async function runAutoreviewAllVisible() {
+      if (!state.selectedWikiId || state.runningBulkReview) {
+        return;
+      }
+      const pages = visiblePages.value || [];
+      if (!pages.length) {
+        return;
+      }
+      const wikiId = state.selectedWikiId;
+      state.runningBulkReview = true;
+      try {
+        for (const page of pages) {
+          if (!page) {
+            continue;
+          }
+          if (state.selectedWikiId !== wikiId) {
+            break;
+          }
+          await runAutoreview(page);
+        }
+      } finally {
+        state.runningBulkReview = false;
+      }
+    }
+
     function getRevisionReview(page, revision) {
       if (!page || !revision) {
         return null;
@@ -515,6 +541,7 @@ createApp({
       buildRevisionDiffUrl,
       buildUserContributionsUrl,
       runAutoreview,
+      runAutoreviewAllVisible,
       getRevisionReview,
       isAutoreviewRunning,
       formatTestStatus,

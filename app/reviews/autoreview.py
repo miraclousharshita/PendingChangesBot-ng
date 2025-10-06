@@ -184,7 +184,7 @@ def _evaluate_revision(
             "decision": AutoreviewDecision(
                 status="blocked",
                 label="Cannot be auto-approved",
-                reason="The earlier version of the article is in blocking categories.",
+                reason="The previous version belongs to blocking categories.",
             ),
         }
 

@@ -92,6 +92,16 @@
             <p class="help" v-if="hasMorePages">
               Showing the first {{ pageDisplayLimit }} of {{ state.pages.length }} pending pages.
             </p>
+            <div class="buttons mt-3">
+              <button
+                class="button is-primary"
+                @click="runAutoreviewAllVisible"
+                :class="{ 'is-loading': state.runningBulkReview }"
+                :disabled="!visiblePages.length || state.runningBulkReview"
+              >
+                Autoreview all listed pages
+              </button>
+            </div>
             <article v-for="page in visiblePages" :key="page.pageid" class="card mb-5">
               <header class="card-header">
                 <p class="card-header-title is-size-5 is-flex is-align-items-center">
@@ -119,7 +129,7 @@
                     class="button is-primary is-light"
                     :class="{ 'is-loading': isAutoreviewRunning(page) }"
                     @click="runAutoreview(page)"
-                    :disabled="isAutoreviewRunning(page)"
+                    :disabled="isAutoreviewRunning(page) || state.runningBulkReview"
                   >
                     Autoreview edits
                   </button>
