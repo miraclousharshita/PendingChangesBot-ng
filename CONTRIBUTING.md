@@ -4,7 +4,7 @@ Thank you for expressing interest in contributing to PendingChangesBot! Please b
 
 ## Code of Conduct
 
-All contributors must follow the project’s Code of Conduct.
+All contributors must follow the project’s [Code of Conduct](https://github.com/Wikimedia-Suomi/PendingChangesBot-ng/blob/main/CODE_OF_CONDUCT.MD).
 
 ## Communication
 
