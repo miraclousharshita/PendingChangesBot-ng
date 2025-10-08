@@ -213,6 +213,10 @@ If your proposal already exists in an open issue or PR, but you feel there are d
 4) Give regular updates.
     * It's expected that you would give regular progress updates about the work that you're doing as comments on the issue so that everyone is in the loop about what work is being accomplished 
 
+5) Claim new tasks responsibly.
+    * If you want to switch to another task for any reason, unassign yourself from the current ticket or issue and leave a comment there so others know it’s available to work on.
+    * Please claim a new task only after you’ve submitted a pull request for your previous one.
+
 ### Branching Strategy
 
 Follow this branching structure:
