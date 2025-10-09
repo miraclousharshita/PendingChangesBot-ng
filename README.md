@@ -34,6 +34,12 @@ Vue.js interface for reviewing the results.
    pip install -r requirements.txt
    ```
 
+5. **Install pre-commit hooks** (recommended for contributors)
+   ```bash
+   pre-commit install
+   ```
+   This will automatically format and lint your code before each commit.
+
 ## Configuring Pywikibot Superset OAuth
 
 Pywikibot needs to log in to [meta.wikimedia.org](https://meta.wikimedia.org) and approve
@@ -87,14 +93,21 @@ cd app
 python manage.py test
 ```
 
-## Running Flake8
+## Code Formatting and Linting
 
-Run Flake8 from the repository root to lint the code according to the configuration provided in `.flake8`.
+This project uses [Ruff](https://docs.astral.sh/ruff/) for code formatting and linting.
+
+**Note:** If you installed pre-commit hooks (step 5 above), formatting and linting happen automatically before each commit. You don't need to run these commands manually.
+
+### Manual Commands
 
 ```bash
-flake8
-```
+# Format code
+ruff format app/
 
+# Check and fix linting issues
+ruff check app/ --fix
+```
 If you are working inside a virtual environment, ensure it is activated before executing the command.
 
 After these steps Pywikibot will be able to call Superset's SQL Lab API without running

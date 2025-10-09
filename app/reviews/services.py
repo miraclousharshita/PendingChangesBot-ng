@@ -5,13 +5,13 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import mwparserfromhell
 import pywikibot
-from pywikibot.data.superset import SupersetQuery
 from django.db import transaction
 from django.utils import timezone as dj_timezone
+from pywikibot.data.superset import SupersetQuery
 
 from .models import EditorProfile, PendingPage, PendingRevision, Wiki
 
@@ -114,9 +114,7 @@ ORDER BY fp_pending_since, rev_id DESC
 
                 page = pages_by_id.get(pageid_int)
                 if page is None:
-                    pending_since = parse_superset_timestamp(
-                        entry.get("fp_pending_since")
-                    )
+                    pending_since = parse_superset_timestamp(entry.get("fp_pending_since"))
                     page = PendingPage.objects.create(
                         wiki=self.wiki,
                         pageid=pageid_int,
@@ -137,9 +135,7 @@ ORDER BY fp_pending_since, rev_id DESC
                 except (TypeError, ValueError):
                     continue
 
-                superset_revision_timestamp = parse_superset_timestamp(
-                    entry.get("rev_timestamp")
-                )
+                superset_revision_timestamp = parse_superset_timestamp(entry.get("rev_timestamp"))
                 if superset_revision_timestamp is None:
                     superset_revision_timestamp = dj_timezone.now()
 
@@ -158,13 +154,9 @@ ORDER BY fp_pending_since, rev_id DESC
 
         return pages
 
-    def _save_revision(
-        self, page: PendingPage, payload: RevisionPayload
-    ) -> PendingRevision | None:
+    def _save_revision(self, page: PendingPage, payload: RevisionPayload) -> PendingRevision | None:
         existing_page = (
-            PendingPage.objects.filter(pk=page.pk).only("id").first()
-            if page.pk
-            else None
+            PendingPage.objects.filter(pk=page.pk).only("id").first() if page.pk else None
         )
         if existing_page is None:
             logger.warning(
@@ -268,12 +260,12 @@ def parse_superset_timestamp(value: str | None) -> datetime | None:
                     logger.warning("Unable to parse Superset timestamp: %s", value)
                     return None
                 else:
-                    timestamp = timestamp.replace(tzinfo=timezone.utc)
+                    timestamp = timestamp.replace(tzinfo=UTC)
             else:
                 logger.warning("Unable to parse Superset timestamp: %s", value)
                 return None
     if timestamp.tzinfo is None:
-        timestamp = timestamp.replace(tzinfo=timezone.utc)
+        timestamp = timestamp.replace(tzinfo=UTC)
     return timestamp
 
 

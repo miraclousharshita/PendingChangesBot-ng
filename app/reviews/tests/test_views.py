@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest import mock
 
 from django.test import Client, TestCase
@@ -63,8 +63,8 @@ class ViewTests(TestCase):
             parentid=None,
             user_name="Stabilizer",
             user_id=9,
-            timestamp=datetime.now(timezone.utc) - timedelta(hours=3),
-            fetched_at=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC) - timedelta(hours=3),
+            fetched_at=datetime.now(UTC),
             age_at_fetch=timedelta(hours=3),
             sha1="stable",
             comment="Stable revision",
@@ -78,8 +78,8 @@ class ViewTests(TestCase):
             parentid=1,
             user_name="User",
             user_id=10,
-            timestamp=datetime.now(timezone.utc) - timedelta(hours=2),
-            fetched_at=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC) - timedelta(hours=2),
+            fetched_at=datetime.now(UTC),
             age_at_fetch=timedelta(hours=2),
             sha1="hash",
             comment="Comment",
@@ -118,8 +118,8 @@ class ViewTests(TestCase):
             parentid=None,
             user_name="Stabilizer",
             user_id=9,
-            timestamp=datetime.now(timezone.utc) - timedelta(hours=6),
-            fetched_at=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC) - timedelta(hours=6),
+            fetched_at=datetime.now(UTC),
             age_at_fetch=timedelta(hours=6),
             sha1="stable",
             comment="Stable revision",
@@ -133,8 +133,8 @@ class ViewTests(TestCase):
             parentid=3,
             user_name="Another",
             user_id=20,
-            timestamp=datetime.now(timezone.utc) - timedelta(minutes=30),
-            fetched_at=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC) - timedelta(minutes=30),
+            fetched_at=datetime.now(UTC),
             age_at_fetch=timedelta(minutes=30),
             sha1="sha",
             comment="More",
@@ -198,8 +198,8 @@ class ViewTests(TestCase):
             parentid=150,
             user_name="HelpfulBot",
             user_id=999,
-            timestamp=datetime.now(timezone.utc) - timedelta(days=1),
-            fetched_at=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC) - timedelta(days=1),
+            fetched_at=datetime.now(UTC),
             age_at_fetch=timedelta(days=1),
             sha1="hash",
             comment="Automated edit",
@@ -238,8 +238,8 @@ class ViewTests(TestCase):
             parentid=150,
             user_name="AdminUser",
             user_id=1000,
-            timestamp=datetime.now(timezone.utc) - timedelta(hours=5),
-            fetched_at=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC) - timedelta(hours=5),
+            fetched_at=datetime.now(UTC),
             age_at_fetch=timedelta(hours=5),
             sha1="hash2",
             comment="Admin edit",
@@ -271,8 +271,8 @@ class ViewTests(TestCase):
             parentid=300,
             user_name="AutoUser",
             user_id=3001,
-            timestamp=datetime.now(timezone.utc) - timedelta(hours=4),
-            fetched_at=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC) - timedelta(hours=4),
+            fetched_at=datetime.now(UTC),
             age_at_fetch=timedelta(hours=4),
             sha1="hash5",
             comment="Edit",
@@ -315,8 +315,8 @@ class ViewTests(TestCase):
             parentid=160,
             user_name="RegularUser",
             user_id=1001,
-            timestamp=datetime.now(timezone.utc) - timedelta(hours=3),
-            fetched_at=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC) - timedelta(hours=3),
+            fetched_at=datetime.now(UTC),
             age_at_fetch=timedelta(hours=3),
             sha1="hash3",
             comment="Edit",
@@ -360,16 +360,9 @@ class ViewTests(TestCase):
 
                 # Check if this is a request for magic words
                 if kwargs.get("meta") == "siteinfo" and kwargs.get("siprop") == "magicwords":
-                    return FakeRequest({
-                        "query": {
-                            "magicwords": [
-                                {
-                                    "name": "redirect",
-                                    "aliases": ["#REDIRECT"]
-                                }
-                            ]
-                        }
-                    })
+                    return FakeRequest(
+                        {"query": {"magicwords": [{"name": "redirect", "aliases": ["#REDIRECT"]}]}}
+                    )
 
                 return FakeRequest(wikitext_response)
 
@@ -410,8 +403,8 @@ class ViewTests(TestCase):
             parentid=170,
             user_name="Editor",
             user_id=1002,
-            timestamp=datetime.now(timezone.utc) - timedelta(hours=2),
-            fetched_at=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC) - timedelta(hours=2),
+            fetched_at=datetime.now(UTC),
             age_at_fetch=timedelta(hours=2),
             sha1="hash4",
             comment="Edit",
@@ -436,8 +429,8 @@ class ViewTests(TestCase):
             title="Multiple Revisions",
             stable_revid=1,
         )
-        older_timestamp = datetime.now(timezone.utc) - timedelta(days=2)
-        newer_timestamp = datetime.now(timezone.utc) - timedelta(days=1)
+        older_timestamp = datetime.now(UTC) - timedelta(days=2)
+        newer_timestamp = datetime.now(UTC) - timedelta(days=1)
         PendingRevision.objects.create(
             page=page,
             revid=301,
@@ -445,7 +438,7 @@ class ViewTests(TestCase):
             user_name="Editor1",
             user_id=2001,
             timestamp=older_timestamp,
-            fetched_at=datetime.now(timezone.utc),
+            fetched_at=datetime.now(UTC),
             age_at_fetch=timedelta(days=2),
             sha1="sha-old",
             comment="Old",
@@ -461,7 +454,7 @@ class ViewTests(TestCase):
             user_name="Editor2",
             user_id=2002,
             timestamp=newer_timestamp,
-            fetched_at=datetime.now(timezone.utc),
+            fetched_at=datetime.now(UTC),
             age_at_fetch=timedelta(days=1),
             sha1="sha-new",
             comment="New",
