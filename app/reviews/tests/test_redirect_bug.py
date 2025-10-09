@@ -21,9 +21,9 @@ class RedirectConversionTests(TestCase):
     def setUp(self):
         self.client = Client()
         self.wiki = Wiki.objects.create(
-            name="Finnish Wikipedia",
-            code="fi",
-            api_endpoint="https://fi.wikipedia.org/w/api.php",
+            name="Test Wiki",
+            code="test",
+            api_endpoint="https://test.example/api.php",
         )
         WikiConfiguration.objects.create(wiki=self.wiki)
 

@@ -46,7 +46,11 @@ class WikiConfiguration(models.Model):
     redirect_aliases = models.JSONField(
         default=list,
         blank=True,
-        help_text="Cached redirect magic word aliases from wiki API (i.e : https://fi.wikipedia.org/w/api.php?action=query&meta=siteinfo&siprop=magicwords)"
+        help_text=(
+            "Cached redirect magic word aliases from wiki API "
+            "(i.e: https://fi.wikipedia.org/w/api.php?"
+            "action=query&meta=siteinfo&siprop=magicwords)"
+        )
     )
     updated_at = models.DateTimeField(auto_now=True)
 

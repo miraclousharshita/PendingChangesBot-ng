@@ -152,7 +152,10 @@ def _evaluate_revision(
                             "id": "article-to-redirect-conversion",
                             "title": "Article-to-redirect conversion",
                             "status": "ok",
-                            "message": "User has autoreview rights and can convert articles to redirects.",
+                            "message": (
+                                "User has autoreview rights and can "
+                                "convert articles to redirects."
+                            ),
                         }
                     )
                     return {
@@ -169,7 +172,10 @@ def _evaluate_revision(
                             "id": "article-to-redirect-conversion",
                             "title": "Article-to-redirect conversion",
                             "status": "fail",
-                            "message": "Converting articles to redirects requires autoreview rights.",
+                            "message": (
+                                "Converting articles to redirects "
+                                "requires autoreview rights."
+                            ),
                         }
                     )
                     return {
@@ -350,7 +356,6 @@ def _get_redirect_aliases(wiki: Wiki) -> list[str]:
                 return aliases
     except Exception:  # pragma: no cover - network failure fallback
         logger.exception("Failed to fetch redirect magic words for %s", wiki.code)
-
 
     language_fallbacks = {
         "de": ["#WEITERLEITUNG", "#REDIRECT"],
