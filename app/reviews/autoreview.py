@@ -96,17 +96,17 @@ def _evaluate_revision(
                 reason="The user is recognized as a bot.",
             ),
         }
+    else:
+        tests.append(
+            {
+                "id": "bot-user",
+                "title": "Bot user",
+                "status": "not_ok",
+                "message": "The user is not marked as a bot.",
+            }
+        )
 
-    tests.append(
-        {
-            "id": "bot-user",
-            "title": "Bot user",
-            "status": "not_ok",
-            "message": "The user is not marked as a bot.",
-        }
-    )
-
-    # Test 2: Editors in the allow-list can be auto-approved.
+    # Test 2: Autoapproved editors can always be auto-approved.
     if auto_groups:
         matched_groups = _matched_user_groups(
             revision, profile, allowed_groups=auto_groups
@@ -130,77 +130,23 @@ def _evaluate_revision(
                     reason="The user belongs to groups that are auto-approved.",
                 ),
             }
-
-        tests.append(
-            {
-                "id": "auto-approved-group",
-                "title": "Auto-approved groups",
-                "status": "not_ok",
-                "message": "The user does not belong to auto-approved groups.",
-            }
-        )
-    else:
-        if profile and (profile.is_autopatrolled or profile.is_autoreviewed):
-            is_redirect_conversion = _is_article_to_redirect_conversion(
-                revision, redirect_aliases
+        else:
+            tests.append(
+                {
+                    "id": "auto-approved-group",
+                    "title": "Auto-approved groups",
+                    "status": "not_ok",
+                    "message": "The user does not belong to auto-approved groups.",
+                }
             )
-
-            if is_redirect_conversion:
-                if profile.is_autoreviewed:
-                    tests.append(
-                        {
-                            "id": "article-to-redirect-conversion",
-                            "title": "Article-to-redirect conversion",
-                            "status": "ok",
-                            "message": (
-                                "User has autoreview rights and can "
-                                "convert articles to redirects."
-                            ),
-                        }
-                    )
-                    return {
-                        "tests": tests,
-                        "decision": AutoreviewDecision(
-                            status="approve",
-                            label="Would be auto-approved",
-                            reason="User has autoreview rights to create redirects.",
-                        ),
-                    }
-                else:
-                    tests.append(
-                        {
-                            "id": "article-to-redirect-conversion",
-                            "title": "Article-to-redirect conversion",
-                            "status": "fail",
-                            "message": (
-                                "Converting articles to redirects "
-                                "requires autoreview rights."
-                            ),
-                        }
-                    )
-                    return {
-                        "tests": tests,
-                        "decision": AutoreviewDecision(
-                            status="blocked",
-                            label="Cannot be auto-approved",
-                            reason="Article-to-redirect conversions require autoreview rights.",
-                        ),
-                    }
-
-            default_rights: list[str] = []
-            if profile.is_autopatrolled:
-                default_rights.append("Autopatrolled")
-            if profile.is_autoreviewed:
-                default_rights.append("Autoreviewed")
-
+    else:
+        if profile and profile.is_autoreviewed:
             tests.append(
                 {
                     "id": "auto-approved-group",
                     "title": "Auto-approved groups",
                     "status": "ok",
-                    "message": "The user has default auto-approval rights: {}.".format(
-                        ", ".join(default_rights)
-                    ),
+                    "message": "The user has default auto-approval rights: Autoreviewed.",
                 }
             )
             return {
@@ -208,20 +154,70 @@ def _evaluate_revision(
                 "decision": AutoreviewDecision(
                     status="approve",
                     label="Would be auto-approved",
-                    reason="The user has default rights that allow auto-approval.",
+                    reason="The user has autoreview rights that allow auto-approval.",
                 ),
             }
+        else:
+            tests.append(
+                {
+                    "id": "auto-approved-group",
+                    "title": "Auto-approved groups",
+                    "status": "not_ok",
+                    "message": (
+                        "The user does not have autoreview rights."
+                        if profile and profile.is_autopatrolled
+                        else "The user does not have default auto-approval rights."
+                    ),
+                }
+            )
 
+    # Test 3: Do not approve article to redirect conversions
+    is_redirect_conversion = _is_article_to_redirect_conversion(
+        revision, redirect_aliases
+    )
+
+    if is_redirect_conversion:
         tests.append(
             {
-                "id": "auto-approved-group",
-                "title": "Auto-approved groups",
-                "status": "not_ok",
-                "message": "The user does not have default auto-approval rights.",
+                "id": "article-to-redirect-conversion",
+                "title": "Article-to-redirect conversion",
+                "status": "fail",
+                "message": (
+                    "Converting articles to redirects "
+                    "requires autoreview rights."
+                ),
+            }
+        )
+        return {
+            "tests": tests,
+            "decision": AutoreviewDecision(
+                status="blocked",
+                label="Cannot be auto-approved",
+                reason="Article-to-redirect conversions require autoreview rights.",
+            ),
+        }
+    else:
+        tests.append(
+            {
+                "id": "article-to-redirect-conversion",
+                "title": "Article-to-redirect conversion",
+                "status": "ok",
+                "message": "This is not an article-to-redirect conversion.",
             }
         )
 
-    # Test 3: Blocking categories on the old version prevent automatic approval.
+    # Check if user has autopatrolled rights (after redirect conversion check)
+    if profile and profile.is_autopatrolled:
+        return {
+            "tests": tests,
+            "decision": AutoreviewDecision(
+                status="approve",
+                label="Would be auto-approved",
+                reason="The user has autopatrol rights that allow auto-approval.",
+            ),
+        }
+
+    # Test 4: Blocking categories on the old version prevent automatic approval.
     blocking_hits = _blocking_category_hits(revision, blocking_categories)
     if blocking_hits:
         tests.append(
@@ -424,41 +420,29 @@ def _is_redirect(wikitext: str, redirect_aliases: list[str]) -> bool:
     return match is not None
 
 
-def _fetch_parent_wikitext(revision: PendingRevision) -> str:
+def _get_parent_wikitext(revision: PendingRevision) -> str:
+    """Get parent revision wikitext from local database.
+
+    The parent should always be available in the local PendingRevision table,
+    as it includes the latest stable revision (fp_stable_id) which is the
+    parent of the first pending change.
+    """
     if not revision.parentid:
         return ""
 
     try:
-        site = pywikibot.Site(
-            code=revision.page.wiki.code,
-            fam=revision.page.wiki.family,
+        parent_revision = PendingRevision.objects.get(
+            page=revision.page,
+            revid=revision.parentid
         )
-        request = site.simple_request(
-            action="query",
-            prop="revisions",
-            revids=str(revision.parentid),
-            rvprop="content",
-            rvslots="main",
-            formatversion=2,
-        )
-        response = request.submit()
-
-        pages = response.get("query", {}).get("pages", [])
-        for page in pages:
-            for rev in page.get("revisions", []) or []:
-                slots = rev.get("slots", {}) or {}
-                main = slots.get("main", {}) or {}
-                content = main.get("content")
-                if content is not None:
-                    return str(content)
-    except Exception:  # pragma: no cover - network failure fallback
-        logger.exception(
-            "Failed to fetch parent wikitext for revision %s (parent %s)",
-            revision.revid,
+        return parent_revision.get_wikitext()
+    except PendingRevision.DoesNotExist:
+        logger.warning(
+            "Parent revision %s not found in local database for revision %s",
             revision.parentid,
+            revision.revid,
         )
-
-    return ""
+        return ""
 
 
 def _is_article_to_redirect_conversion(
@@ -472,15 +456,7 @@ def _is_article_to_redirect_conversion(
     if not revision.parentid:
         return False
 
-    try:
-        parent_revision = PendingRevision.objects.get(
-            page=revision.page,
-            revid=revision.parentid
-        )
-        parent_wikitext = parent_revision.get_wikitext()
-    except PendingRevision.DoesNotExist:
-        parent_wikitext = _fetch_parent_wikitext(revision)
-
+    parent_wikitext = _get_parent_wikitext(revision)
     if not parent_wikitext:
         return False
 

@@ -13,6 +13,14 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='wikiconfiguration',
             name='redirect_aliases',
-            field=models.JSONField(blank=True, default=list, help_text='Cached redirect magic word aliases from wiki API (i.e: https://fi.wikipedia.org/w/api.php?action=query&meta=siteinfo&siprop=magicwords)'),
+            field=models.JSONField(
+                blank=True,
+                default=list,
+                help_text=(
+                    'Cached redirect magic word aliases from wiki API '
+                    '(i.e: https://fi.wikipedia.org/w/api.php?'
+                    'action=query&meta=siteinfo&siprop=magicwords)'
+                )
+            ),
         ),
     ]

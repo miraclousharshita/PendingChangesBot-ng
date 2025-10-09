@@ -23,7 +23,8 @@ class RedirectConversionTests(TestCase):
         self.wiki = Wiki.objects.create(
             name="Test Wiki",
             code="test",
-            api_endpoint="https://test.example/api.php",
+            family="wikipedia",
+            api_endpoint="https://test.wikipedia.org/w/api.php",
         )
         WikiConfiguration.objects.create(wiki=self.wiki)
 
@@ -235,6 +236,23 @@ Yliopistossa on kaksi pääkirjastoa, yhteensä 46 000 neliömetriä.
 
         PendingRevision.objects.create(
             page=page,
+            revid=50,
+            parentid=None,
+            user_name="PreviousEditor",
+            user_id=776,
+            timestamp=datetime.now(timezone.utc) - timedelta(hours=1),
+            fetched_at=datetime.now(timezone.utc),
+            age_at_fetch=timedelta(hours=1),
+            sha1="oldhash",
+            comment="Initial redirect",
+            change_tags=[],
+            wikitext=old_redirect,
+            categories=[],
+            superset_data={},
+        )
+
+        PendingRevision.objects.create(
+            page=page,
             revid=60,
             parentid=50,
             user_name="Editor",
@@ -245,7 +263,7 @@ Yliopistossa on kaksi pääkirjastoa, yhteensä 46 000 neliömetriä.
             sha1="hash",
             comment="Update redirect target",
             change_tags=[],
-            wikitext="",
+            wikitext=new_redirect,
             categories=[],
             superset_data={"user_groups": ["user", "autopatrolled"]},
         )
