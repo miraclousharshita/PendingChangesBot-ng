@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import logging
+import re
 from dataclasses import dataclass
 from typing import Iterable
 
-from .models import EditorProfile, PendingPage, PendingRevision
+import pywikibot
+
+from .models import EditorProfile, PendingPage, PendingRevision, Wiki
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -35,6 +41,7 @@ def run_autoreview_for_page(page: PendingPage) -> list[dict]:
 
     auto_groups = _normalize_to_lookup(configuration.auto_approved_groups)
     blocking_categories = _normalize_to_lookup(configuration.blocking_categories)
+    redirect_aliases = _get_redirect_aliases(page.wiki)
 
     results: list[dict] = []
     for revision in revisions:
@@ -44,6 +51,7 @@ def run_autoreview_for_page(page: PendingPage) -> list[dict]:
             profile,
             auto_groups=auto_groups,
             blocking_categories=blocking_categories,
+            redirect_aliases=redirect_aliases,
         )
         results.append(
             {
@@ -66,6 +74,7 @@ def _evaluate_revision(
     *,
     auto_groups: dict[str, str],
     blocking_categories: dict[str, str],
+    redirect_aliases: list[str],
 ) -> dict:
     tests: list[dict] = []
 
@@ -132,6 +141,46 @@ def _evaluate_revision(
         )
     else:
         if profile and (profile.is_autopatrolled or profile.is_autoreviewed):
+            is_redirect_conversion = _is_article_to_redirect_conversion(
+                revision, redirect_aliases
+            )
+
+            if is_redirect_conversion:
+                if profile.is_autoreviewed:
+                    tests.append(
+                        {
+                            "id": "article-to-redirect-conversion",
+                            "title": "Article-to-redirect conversion",
+                            "status": "ok",
+                            "message": "User has autoreview rights and can convert articles to redirects.",
+                        }
+                    )
+                    return {
+                        "tests": tests,
+                        "decision": AutoreviewDecision(
+                            status="approve",
+                            label="Would be auto-approved",
+                            reason="User has autoreview rights to create redirects.",
+                        ),
+                    }
+                else:
+                    tests.append(
+                        {
+                            "id": "article-to-redirect-conversion",
+                            "title": "Article-to-redirect conversion",
+                            "status": "fail",
+                            "message": "Converting articles to redirects requires autoreview rights.",
+                        }
+                    )
+                    return {
+                        "tests": tests,
+                        "decision": AutoreviewDecision(
+                            status="blocked",
+                            label="Cannot be auto-approved",
+                            reason="Article-to-redirect conversions require autoreview rights.",
+                        ),
+                    }
+
             default_rights: list[str] = []
             if profile.is_autopatrolled:
                 default_rights.append("Autopatrolled")
@@ -275,3 +324,138 @@ def _blocking_category_hits(
         if normalized in blocking_lookup:
             matched.add(blocking_lookup[normalized])
     return matched
+
+
+def _get_redirect_aliases(wiki: Wiki) -> list[str]:
+    config = wiki.configuration
+    if config.redirect_aliases:
+        return config.redirect_aliases
+
+    try:
+        site = pywikibot.Site(code=wiki.code, fam=wiki.family)
+        request = site.simple_request(
+            action="query",
+            meta="siteinfo",
+            siprop="magicwords",
+            formatversion=2,
+        )
+        response = request.submit()
+
+        magic_words = response.get("query", {}).get("magicwords", [])
+        for magic_word in magic_words:
+            if magic_word.get("name") == "redirect":
+                aliases = magic_word.get("aliases", [])
+                config.redirect_aliases = aliases
+                config.save(update_fields=["redirect_aliases", "updated_at"])
+                return aliases
+    except Exception:  # pragma: no cover - network failure fallback
+        logger.exception("Failed to fetch redirect magic words for %s", wiki.code)
+
+
+    language_fallbacks = {
+        "de": ["#WEITERLEITUNG", "#REDIRECT"],
+        "en": ["#REDIRECT"],
+        "pl": ["#PATRZ", "#PRZEKIERUJ", "#TAM", "#REDIRECT"],
+        "fi": ["#OHJAUS", "#UUDELLEENOHJAUS", "#REDIRECT"],
+    }
+
+    fallback_aliases = language_fallbacks.get(
+        wiki.code,
+        ["#REDIRECT"]  # fallback for non default languages
+    )
+
+    logger.warning(
+        "Using fallback redirect aliases for %s: %s",
+        wiki.code,
+        fallback_aliases,
+    )
+
+    # Not saving fallback to cache, so it can be updated later using the API
+    return fallback_aliases
+
+
+def _is_redirect(wikitext: str, redirect_aliases: list[str]) -> bool:
+    if not wikitext or not redirect_aliases:
+        return False
+
+    patterns = []
+    for alias in redirect_aliases:
+        word = alias.lstrip('#').strip()
+        if word:
+            patterns.append(re.escape(word))
+
+    if not patterns:
+        return False
+
+    redirect_pattern = (
+        r'^#[ \t]*(' + '|'.join(patterns) + r')[ \t]*\[\[([^\]\n\r]+?)\]\]'
+    )
+
+    match = re.match(redirect_pattern, wikitext, re.IGNORECASE)
+    return match is not None
+
+
+def _fetch_parent_wikitext(revision: PendingRevision) -> str:
+    if not revision.parentid:
+        return ""
+
+    try:
+        site = pywikibot.Site(
+            code=revision.page.wiki.code,
+            fam=revision.page.wiki.family,
+        )
+        request = site.simple_request(
+            action="query",
+            prop="revisions",
+            revids=str(revision.parentid),
+            rvprop="content",
+            rvslots="main",
+            formatversion=2,
+        )
+        response = request.submit()
+
+        pages = response.get("query", {}).get("pages", [])
+        for page in pages:
+            for rev in page.get("revisions", []) or []:
+                slots = rev.get("slots", {}) or {}
+                main = slots.get("main", {}) or {}
+                content = main.get("content")
+                if content is not None:
+                    return str(content)
+    except Exception:  # pragma: no cover - network failure fallback
+        logger.exception(
+            "Failed to fetch parent wikitext for revision %s (parent %s)",
+            revision.revid,
+            revision.parentid,
+        )
+
+    return ""
+
+
+def _is_article_to_redirect_conversion(
+    revision: PendingRevision,
+    redirect_aliases: list[str],
+) -> bool:
+    current_wikitext = revision.get_wikitext()
+    if not _is_redirect(current_wikitext, redirect_aliases):
+        return False
+
+    if not revision.parentid:
+        return False
+
+    try:
+        parent_revision = PendingRevision.objects.get(
+            page=revision.page,
+            revid=revision.parentid
+        )
+        parent_wikitext = parent_revision.get_wikitext()
+    except PendingRevision.DoesNotExist:
+        parent_wikitext = _fetch_parent_wikitext(revision)
+
+    if not parent_wikitext:
+        return False
+
+    if _is_redirect(parent_wikitext, redirect_aliases):
+        return False
+
+    return True

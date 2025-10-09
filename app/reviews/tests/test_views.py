@@ -356,6 +356,20 @@ class ViewTests(TestCase):
 
             def simple_request(self, **kwargs):
                 self.requests.append(kwargs)
+
+                # Check if this is a request for magic words
+                if kwargs.get("meta") == "siteinfo" and kwargs.get("siprop") == "magicwords":
+                    return FakeRequest({
+                        "query": {
+                            "magicwords": [
+                                {
+                                    "name": "redirect",
+                                    "aliases": ["#REDIRECT"]
+                                }
+                            ]
+                        }
+                    })
+
                 return FakeRequest(wikitext_response)
 
         fake_site = FakeSite()
@@ -373,11 +387,14 @@ class ViewTests(TestCase):
         revision.refresh_from_db()
         self.assertEqual(revision.wikitext, "Hidden [[Category:Secret]]")
         self.assertEqual(revision.categories, ["Secret"])
-        self.assertEqual(len(fake_site.requests), 1)
+        # 2 requests: 1 for redirect aliases, 1 for wikitext
+        self.assertEqual(len(fake_site.requests), 2)
 
         second_response = self.client.post(url)
         self.assertEqual(second_response.status_code, 200)
-        self.assertEqual(len(fake_site.requests), 1)
+        # redirect aliases are now cached, wikitext was already cached
+        # No new API calls are made on the second request
+        self.assertEqual(len(fake_site.requests), 2)
 
     def test_api_autoreview_requires_manual_review_when_no_rules_apply(self):
         page = PendingPage.objects.create(
