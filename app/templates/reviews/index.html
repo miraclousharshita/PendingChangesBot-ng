@@ -234,11 +234,10 @@
               </div>
             </article>
             </div>
-            <div class="notification is-info" v-else>
+            <div class="notification is-info" v-if="state.pages.length && !visiblePages.length">
               No pages match your search criteria. Try a different search term.
             </div>
           </div>
-        </div>
         <div class="notification is-warning" v-else>
           No pending revisions cached. Use the refresh button to fetch data.
         </div>
