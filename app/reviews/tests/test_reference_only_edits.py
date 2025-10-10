@@ -492,8 +492,9 @@ class DomainUsageCheckTests(TestCase):
             api_endpoint="https://test.wikipedia.org/w/api.php",
         )
 
+    @mock.patch("reviews.autoreview.logger")
     @mock.patch("reviews.autoreview.pywikibot.Site")
-    def test_check_domain_usage_existing_domain(self, mock_site):
+    def test_check_domain_usage_existing_domain(self, mock_site, mock_logger):
         """Test checking a domain that exists in Wikipedia."""
 
         class FakeSite:
@@ -506,8 +507,9 @@ class DomainUsageCheckTests(TestCase):
         result = _check_domain_usage_in_wikipedia(self.wiki, "example.com")
         self.assertTrue(result)
 
+    @mock.patch("reviews.autoreview.logger")
     @mock.patch("reviews.autoreview.pywikibot.Site")
-    def test_check_domain_usage_new_domain(self, mock_site):
+    def test_check_domain_usage_new_domain(self, mock_site, mock_logger):
         """Test checking a domain that doesn't exist in Wikipedia."""
 
         class FakeSite:
@@ -520,8 +522,9 @@ class DomainUsageCheckTests(TestCase):
         result = _check_domain_usage_in_wikipedia(self.wiki, "newdomain.com")
         self.assertFalse(result)
 
+    @mock.patch("reviews.autoreview.logger")
     @mock.patch("reviews.autoreview.pywikibot.Site")
-    def test_check_domain_usage_api_error(self, mock_site):
+    def test_check_domain_usage_api_error(self, mock_site, mock_logger):
         """Test that API errors are handled gracefully."""
 
         class FakeSite:
@@ -596,12 +599,14 @@ class ReferenceOnlyEditAutoApprovalTests(TestCase):
         self.assertEqual(result["decision"]["status"], "approve")
         self.assertIn("reference", result["decision"]["reason"].lower())
 
+    @mock.patch("reviews.services.WikiClient.get_rendered_html")
     @mock.patch("reviews.autoreview.pywikibot.Site")
     @mock.patch("reviews.models.pywikibot.Site")
     def test_reference_only_edit_with_known_domain_auto_approved(
-        self, mock_models_site, mock_autoreview_site
+        self, mock_models_site, mock_autoreview_site, mock_get_html
     ):
         """Reference-only edit with known domain should be auto-approved."""
+        mock_get_html.return_value = "<p>No errors</p>"
         old_text = "Article text."
         new_text = (
             "Article text.<ref>{{cite web|url=https://example.com/page}}</ref>"
@@ -647,12 +652,14 @@ class ReferenceOnlyEditAutoApprovalTests(TestCase):
 
         self.assertEqual(result["decision"]["status"], "approve")
 
+    @mock.patch("reviews.services.WikiClient.get_rendered_html")
     @mock.patch("reviews.autoreview.pywikibot.Site")
     @mock.patch("reviews.models.pywikibot.Site")
     def test_reference_only_edit_with_new_domain_requires_review(
-        self, mock_models_site, mock_autoreview_site
+        self, mock_models_site, mock_autoreview_site, mock_get_html
     ):
         """Reference-only edit with new domain should require manual review."""
+        mock_get_html.return_value = "<p>No errors</p>"
         old_text = "Article text."
         new_text = (
             "Article text.<ref>{{cite web|url=https://newdomain.com/page}}</ref>"
