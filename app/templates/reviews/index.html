@@ -87,6 +87,9 @@
           </div>
         </div>
 
+      <div class="notification is-danger" v-if="state.error">{{ state.error }}</div>
+      <div class="notification is-info" v-if="state.loading">Loading data…</div>
+
         <div v-if="state.pages.length">
           <div class="content">
             <h2 class="title is-4">Pending pages</h2>
@@ -224,9 +227,6 @@
           No pending revisions cached. Use the refresh button to fetch data.
         </div>
       </section>
-
-      <div class="notification is-danger" v-if="state.error">{{ state.error }}</div>
-      <div class="notification is-info" v-if="state.loading">Loading data…</div>
     </div>
     {% endverbatim %}
 
