@@ -25,7 +25,7 @@ class ViewTests(TestCase):
             family="wikipedia",
             api_endpoint="https://test.wikipedia.org/w/api.php",
         )
-        WikiConfiguration.objects.create(wiki=self.wiki)
+        WikiConfiguration.objects.create(wiki=self.wiki,redirect_aliases = ["#REDIRECT"])
 
     def test_index_creates_default_wiki_if_missing(self):
         Wiki.objects.all().delete()
@@ -398,14 +398,13 @@ class ViewTests(TestCase):
         revision.refresh_from_db()
         self.assertEqual(revision.wikitext, "Hidden [[Category:Secret]]")
         self.assertEqual(revision.categories, ["Secret"])
-        # 2 requests: 1 for redirect aliases, 1 for wikitext
-        self.assertEqual(len(fake_site.requests), 2)
+        # 1 request for wikitext (redirect aliases already cached in setUp)
+        self.assertEqual(len(fake_site.requests), 1)
 
         second_response = self.client.post(url)
         self.assertEqual(second_response.status_code, 200)
-        # redirect aliases are now cached, wikitext was already cached
-        # No new API calls are made on the second request
-        self.assertEqual(len(fake_site.requests), 2)
+        # wikitext was already cached, no new API calls are made
+        self.assertEqual(len(fake_site.requests), 1)
 
     @mock.patch("reviews.models.pywikibot.Site")
     @mock.patch("reviews.services.pywikibot.Site")
