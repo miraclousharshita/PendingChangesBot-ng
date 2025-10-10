@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 
 from django.test import Client, TestCase
@@ -121,8 +121,8 @@ Yliopistossa on kaksi pääkirjastoa, yhteensä 46 000 neliömetriä.
             parentid=None,
             user_name="OriginalAuthor",
             user_id=99999,
-            timestamp=datetime.now(UTC) - timedelta(days=1),
-            fetched_at=datetime.now(UTC),
+            timestamp=datetime.now(timezone.utc) - timedelta(days=1),
+            fetched_at=datetime.now(timezone.utc),
             age_at_fetch=timedelta(days=1),
             sha1="oldsha",
             comment="Original article",
@@ -138,8 +138,8 @@ Yliopistossa on kaksi pääkirjastoa, yhteensä 46 000 neliömetriä.
             parentid=22754221,
             user_name="RegularUser",
             user_id=12345,
-            timestamp=datetime.now(UTC) - timedelta(hours=1),
-            fetched_at=datetime.now(UTC),
+            timestamp=datetime.now(timezone.utc) - timedelta(hours=1),
+            fetched_at=datetime.now(timezone.utc),
             age_at_fetch=timedelta(hours=1),
             sha1="abc123",
             comment="f: muutettu ohjaussivuksi",
@@ -248,8 +248,8 @@ Yliopistossa on kaksi pääkirjastoa, yhteensä 46 000 neliömetriä.
             parentid=None,
             user_name="PreviousEditor",
             user_id=776,
-            timestamp=datetime.now(UTC) - timedelta(hours=1),
-            fetched_at=datetime.now(UTC),
+            timestamp=datetime.now(timezone.utc) - timedelta(hours=1),
+            fetched_at=datetime.now(timezone.utc),
             age_at_fetch=timedelta(hours=1),
             sha1="oldhash",
             comment="Initial redirect",
@@ -265,8 +265,8 @@ Yliopistossa on kaksi pääkirjastoa, yhteensä 46 000 neliömetriä.
             parentid=50,
             user_name="Editor",
             user_id=777,
-            timestamp=datetime.now(UTC) - timedelta(minutes=30),
-            fetched_at=datetime.now(UTC),
+            timestamp=datetime.now(timezone.utc) - timedelta(minutes=30),
+            fetched_at=datetime.now(timezone.utc),
             age_at_fetch=timedelta(minutes=30),
             sha1="hash",
             comment="Update redirect target",
@@ -367,8 +367,8 @@ Yliopistossa on kaksi pääkirjastoa, yhteensä 46 000 neliömetriä.
             parentid=100,
             user_name="TrustedUser",
             user_id=999,
-            timestamp=datetime.now(UTC) - timedelta(hours=1),
-            fetched_at=datetime.now(UTC),
+            timestamp=datetime.now(timezone.utc) - timedelta(hours=1),
+            fetched_at=datetime.now(timezone.utc),
             age_at_fetch=timedelta(hours=1),
             sha1="hash",
             comment="Redirect",
@@ -458,8 +458,8 @@ Yliopistossa on kaksi pääkirjastoa, yhteensä 46 000 neliömetriä.
             parentid=500,
             user_name="AutoreviewedEditor",
             user_id=8888,
-            timestamp=datetime.now(UTC) - timedelta(hours=1),
-            fetched_at=datetime.now(UTC),
+            timestamp=datetime.now(timezone.utc) - timedelta(hours=1),
+            fetched_at=datetime.now(timezone.utc),
             age_at_fetch=timedelta(hours=1),
             sha1="hash999",
             comment="Converting to redirect",

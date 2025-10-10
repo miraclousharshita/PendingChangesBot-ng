@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import mwparserfromhell
 import pywikibot
@@ -260,12 +260,12 @@ def parse_superset_timestamp(value: str | None) -> datetime | None:
                     logger.warning("Unable to parse Superset timestamp: %s", value)
                     return None
                 else:
-                    timestamp = timestamp.replace(tzinfo=UTC)
+                    timestamp = timestamp.replace(tzinfo=timezone.utc)
             else:
                 logger.warning("Unable to parse Superset timestamp: %s", value)
                 return None
     if timestamp.tzinfo is None:
-        timestamp = timestamp.replace(tzinfo=UTC)
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
     return timestamp
 
 
