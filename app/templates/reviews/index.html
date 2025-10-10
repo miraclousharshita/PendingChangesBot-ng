@@ -40,6 +40,9 @@
         </div>
       </section>
 
+      <div class="notification is-danger" v-if="state.error">{{ state.error }}</div>
+      <div class="notification is-info" v-if="state.loading">Loading data…</div>
+
       <section class="section" v-if="currentWiki">
         <div class="box mb-5">
           <div class="level is-mobile">
@@ -210,9 +213,6 @@
           No pending revisions cached. Use the refresh button to fetch data.
         </div>
       </section>
-
-      <div class="notification is-danger" v-if="state.error">{{ state.error }}</div>
-      <div class="notification is-info" v-if="state.loading">Loading data…</div>
     </div>
     {% endverbatim %}
 
