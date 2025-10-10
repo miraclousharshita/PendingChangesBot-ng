@@ -8,10 +8,9 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 import pywikibot
-
-from .models import EditorProfile, PendingPage, PendingRevision, Wiki
 from bs4 import BeautifulSoup
 
+from .models import EditorProfile, PendingPage, PendingRevision, Wiki
 from .services import WikiClient
 
 logger = logging.getLogger(__name__)
@@ -313,9 +312,7 @@ def _check_for_new_render_errors(revision: PendingRevision, client: WikiClient) 
         page__wiki=revision.page.wiki, revid=revision.parentid
     ).first()
     previous_error_count = (
-        _get_render_error_count(parent_revision, previous_html)
-        if parent_revision
-        else 0
+        _get_render_error_count(parent_revision, previous_html) if parent_revision else 0
     )
 
     return current_error_count > previous_error_count
