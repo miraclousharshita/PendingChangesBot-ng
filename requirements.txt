@@ -3,3 +3,5 @@ pywikibot>=9.0.0
 mwparserfromhell>=0.6.6
 requests>=2.31.0
 flake8>=6.0.0
+black>=24.1.0
+pre-commit>=3.6.0

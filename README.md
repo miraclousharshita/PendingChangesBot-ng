@@ -33,6 +33,11 @@ Vue.js interface for reviewing the results.
    pip install --upgrade pip
    pip install -r requirements.txt
    ```
+5. **Set up pre-commit hooks** (recommended)
+   ```bash
+   pre-commit install
+   ```
+   This will automatically run Black formatter and Flake8 linter before each commit.
 
 ## Configuring Pywikibot Superset OAuth
 
@@ -87,15 +92,39 @@ cd app
 python manage.py test
 ```
 
-## Running Flake8
+## Code Quality Tools
 
-Run Flake8 from the repository root to lint the code according to the configuration provided in `.flake8`.
+### Running Black Formatter
+
+Black is configured to automatically format code with a line length of 100 characters. Run it from the repository root:
+
+```bash
+black .
+```
+
+To check formatting without making changes:
+
+```bash
+black --check .
+```
+
+### Running Flake8
+
+Run Flake8 from the repository root to lint the code according to the configuration provided in `.flake8`:
 
 ```bash
 flake8
 ```
 
-If you are working inside a virtual environment, ensure it is activated before executing the command.
+### Pre-commit Hooks
+
+If you installed pre-commit hooks (recommended), they will automatically run Black and Flake8 before each commit. To manually run all pre-commit hooks:
+
+```bash
+pre-commit run --all-files
+```
+
+If you are working inside a virtual environment, ensure it is activated before executing these commands.
 
 After these steps Pywikibot will be able to call Superset's SQL Lab API without running
 into `User not logged in` errors, and PendingChangesBot can fetch pending revisions

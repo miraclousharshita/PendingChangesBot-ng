@@ -27,15 +27,12 @@ def run_autoreview_for_page(page: PendingPage) -> list[dict]:
     """Run the configured autoreview checks for each pending revision of a page."""
 
     revisions = list(
-        page.revisions.exclude(revid=page.stable_revid)
-        .order_by("timestamp", "revid")
+        page.revisions.exclude(revid=page.stable_revid).order_by("timestamp", "revid")
     )  # Oldest revision first.
     usernames = {revision.user_name for revision in revisions if revision.user_name}
     profiles = {
         profile.username: profile
-        for profile in EditorProfile.objects.filter(
-            wiki=page.wiki, username__in=usernames
-        )
+        for profile in EditorProfile.objects.filter(wiki=page.wiki, username__in=usernames)
     }
     configuration = page.wiki.configuration
 
@@ -108,9 +105,7 @@ def _evaluate_revision(
 
     # Test 2: Autoapproved editors can always be auto-approved.
     if auto_groups:
-        matched_groups = _matched_user_groups(
-            revision, profile, allowed_groups=auto_groups
-        )
+        matched_groups = _matched_user_groups(revision, profile, allowed_groups=auto_groups)
         if matched_groups:
             tests.append(
                 {
@@ -172,9 +167,7 @@ def _evaluate_revision(
             )
 
     # Test 3: Do not approve article to redirect conversions
-    is_redirect_conversion = _is_article_to_redirect_conversion(
-        revision, redirect_aliases
-    )
+    is_redirect_conversion = _is_article_to_redirect_conversion(revision, redirect_aliases)
 
     if is_redirect_conversion:
         tests.append(
@@ -182,10 +175,7 @@ def _evaluate_revision(
                 "id": "article-to-redirect-conversion",
                 "title": "Article-to-redirect conversion",
                 "status": "fail",
-                "message": (
-                    "Converting articles to redirects "
-                    "requires autoreview rights."
-                ),
+                "message": ("Converting articles to redirects " "requires autoreview rights."),
             }
         )
         return {
@@ -318,9 +308,7 @@ def _matched_user_groups(
     return matched
 
 
-def _blocking_category_hits(
-    revision: PendingRevision, blocking_lookup: dict[str, str]
-) -> set[str]:
+def _blocking_category_hits(revision: PendingRevision, blocking_lookup: dict[str, str]) -> set[str]:
     if not blocking_lookup:
         return set()
 
@@ -342,10 +330,7 @@ def is_bot_edit(revision: PendingRevision) -> bool:
     if not revision.user_name:
         return False
     try:
-        profile = EditorProfile.objects.get(
-            wiki=revision.page.wiki,
-            username=revision.user_name
-        )
+        profile = EditorProfile.objects.get(wiki=revision.page.wiki, username=revision.user_name)
         # Check both current bot status and former bot status
         return profile.is_bot or profile.is_former_bot
     except EditorProfile.DoesNotExist:
@@ -385,8 +370,7 @@ def _get_redirect_aliases(wiki: Wiki) -> list[str]:
     }
 
     fallback_aliases = language_fallbacks.get(
-        wiki.code,
-        ["#REDIRECT"]  # fallback for non default languages
+        wiki.code, ["#REDIRECT"]  # fallback for non default languages
     )
 
     logger.warning(
@@ -405,16 +389,14 @@ def _is_redirect(wikitext: str, redirect_aliases: list[str]) -> bool:
 
     patterns = []
     for alias in redirect_aliases:
-        word = alias.lstrip('#').strip()
+        word = alias.lstrip("#").strip()
         if word:
             patterns.append(re.escape(word))
 
     if not patterns:
         return False
 
-    redirect_pattern = (
-        r'^#[ \t]*(' + '|'.join(patterns) + r')[ \t]*\[\[([^\]\n\r]+?)\]\]'
-    )
+    redirect_pattern = r"^#[ \t]*(" + "|".join(patterns) + r")[ \t]*\[\[([^\]\n\r]+?)\]\]"
 
     match = re.match(redirect_pattern, wikitext, re.IGNORECASE)
     return match is not None
@@ -431,10 +413,7 @@ def _get_parent_wikitext(revision: PendingRevision) -> str:
         return ""
 
     try:
-        parent_revision = PendingRevision.objects.get(
-            page=revision.page,
-            revid=revision.parentid
-        )
+        parent_revision = PendingRevision.objects.get(page=revision.page, revid=revision.parentid)
         return parent_revision.get_wikitext()
     except PendingRevision.DoesNotExist:
         logger.warning(

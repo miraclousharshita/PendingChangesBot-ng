@@ -226,16 +226,10 @@ def api_refresh(request: HttpRequest, pk: int) -> JsonResponse:
 
 
 def _build_revision_payload(revisions, wiki):
-    usernames: set[str] = {
-        revision.user_name
-        for revision in revisions
-        if revision.user_name
-    }
+    usernames: set[str] = {revision.user_name for revision in revisions if revision.user_name}
     profiles = {
         profile.username: profile
-        for profile in EditorProfile.objects.filter(
-            wiki=wiki, username__in=usernames
-        )
+        for profile in EditorProfile.objects.filter(wiki=wiki, username__in=usernames)
     }
 
     payload: list[dict] = []
@@ -258,9 +252,7 @@ def _build_revision_payload(revisions, wiki):
             else:
                 superset_categories = superset_data.get("page_categories") or []
                 if isinstance(superset_categories, list):
-                    categories = [
-                        str(category) for category in superset_categories if category
-                    ]
+                    categories = [str(category) for category in superset_categories if category]
                 else:
                     categories = []
 
@@ -271,9 +263,11 @@ def _build_revision_payload(revisions, wiki):
                 "timestamp": revision.timestamp.isoformat(),
                 "age_seconds": int(revision.age_at_fetch.total_seconds()),
                 "user_name": revision.user_name,
-                "change_tags": revision.change_tags
-                if revision.change_tags
-                else superset_data.get("change_tags", []),
+                "change_tags": (
+                    revision.change_tags
+                    if revision.change_tags
+                    else superset_data.get("change_tags", [])
+                ),
                 "comment": revision.comment,
                 "categories": categories,
                 "sha1": revision.sha1,
@@ -290,15 +284,15 @@ def _build_revision_payload(revisions, wiki):
                         else ("bot" in group_set or bool(superset_data.get("rc_bot")))
                     ),
                     "is_autopatrolled": (
-                        profile.is_autopatrolled
-                        if profile
-                        else ("autopatrolled" in group_set)
+                        profile.is_autopatrolled if profile else ("autopatrolled" in group_set)
                     ),
                     "is_autoreviewed": (
                         profile.is_autoreviewed
                         if profile
-                        else bool(group_set & {"autoreview", "autoreviewer", "editor",
-                                               "reviewer", "sysop", "bot"})
+                        else bool(
+                            group_set
+                            & {"autoreview", "autoreviewer", "editor", "reviewer", "sysop", "bot"}
+                        )
                     ),
                 },
             }
