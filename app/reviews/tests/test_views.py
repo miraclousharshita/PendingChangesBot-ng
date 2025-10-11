@@ -35,9 +35,30 @@ class ViewTests(TestCase):
         codes = list(Wiki.objects.values_list("code", flat=True))
         # All Wikipedias with FlaggedRevisions enabled
         expected_codes = [
-            "als", "ar", "be", "bn", "bs", "ce", "ckb", "de", "en", "eo",
-            "fa", "fi", "hi", "hu", "ia", "id", "ka", "pl", "pt", "ru",
-            "sq", "tr", "uk", "vec"
+            "als",
+            "ar",
+            "be",
+            "bn",
+            "bs",
+            "ce",
+            "ckb",
+            "de",
+            "en",
+            "eo",
+            "fa",
+            "fi",
+            "hi",
+            "hu",
+            "ia",
+            "id",
+            "ka",
+            "pl",
+            "pt",
+            "ru",
+            "sq",
+            "tr",
+            "uk",
+            "vec",
         ]
         self.assertCountEqual(codes, expected_codes)
 
@@ -370,16 +391,9 @@ class ViewTests(TestCase):
 
                 # Check if this is a request for magic words
                 if kwargs.get("meta") == "siteinfo" and kwargs.get("siprop") == "magicwords":
-                    return FakeRequest({
-                        "query": {
-                            "magicwords": [
-                                {
-                                    "name": "redirect",
-                                    "aliases": ["#REDIRECT"]
-                                }
-                            ]
-                        }
-                    })
+                    return FakeRequest(
+                        {"query": {"magicwords": [{"name": "redirect", "aliases": ["#REDIRECT"]}]}}
+                    )
 
                 return FakeRequest(wikitext_response)
 
