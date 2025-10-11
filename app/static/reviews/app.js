@@ -166,21 +166,28 @@ createApp({
       const query = state.searchQuery.toLowerCase().trim();
 
       // Check page title
-      if (page.title && page.title.toLowerCase().includes(query)) {
-        return true;
-      }
-
-      // Check page's pending_since timestamp
-      if (page.pending_since && page.pending_since.toLowerCase().includes(query)) {
-        return true;
+      if (page.title) {
+        const formattedTitle = formatTitle(page.title).toLowerCase().replace(/\s+/g, ' ');
+        const normalizedQuery = query.replace(/\s+/g, ' ');
+        if (formattedTitle.includes(normalizedQuery)) {
+          return true;
+        }
       }
 
       // Check revisions
       if (Array.isArray(page.revisions)) {
         for (const revision of page.revisions) {
           // Check timestamp
-          if (revision.timestamp && revision.timestamp.toLowerCase().includes(query)) {
-            return true;
+          if (revision.timestamp) {
+            // Check raw timestamp
+            if (revision.timestamp.toLowerCase().includes(query)) {
+              return true;
+            }
+            // Check formatted timestamp as displayed in UI
+            const formattedTimestamp = formatDateTime(revision.timestamp).toLowerCase();
+            if (formattedTimestamp.includes(query)) {
+              return true;
+            }
           }
           // Check user_name
           if (revision.user_name && revision.user_name.toLowerCase().includes(query)) {
