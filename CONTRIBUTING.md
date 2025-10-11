@@ -89,7 +89,7 @@ Before installing or running the application, ensure you have:
    python3 -m venv venv
    source venv/bin/activate  # On Windows use: .venv\\Scripts\\activate
    ```
-4. **Install Python dependencies**
+5. **Install Python dependencies**
    * On **Windows**:
    ```bash
    pip install --upgrade pip
@@ -100,6 +100,11 @@ Before installing or running the application, ensure you have:
    pip3 install --upgrade pip
    pip3 install -r requirements.txt
    ```
+6. **Install pre-commit hooks** (recommended for contributors)
+   ```bash
+   pre-commit install
+   ```
+   This will automatically format and lint your code before each commit.
 
 ### Configuring Pywikibot Superset OAuth
 
@@ -181,13 +186,21 @@ Unit tests live in the Django backend project. Run them from the `app/` director
    python3 manage.py test
    ```
 
-### Running Flake8
+### Code Formatting and Linting
 
-Run Flake8 from the repository root to lint the code according to the configuration provided in `.flake8`.
+This project uses [Ruff](https://docs.astral.sh/ruff/) for code formatting and linting.
 
-   ```bash
-   flake8
-   ```
+**Note:** If you installed pre-commit hooks (step 5 above), formatting and linting happen automatically before each commit. You don't need to run these commands manually.
+
+### Manual Commands
+
+```bash
+# Format code
+ruff format app/
+
+# Check and fix linting issues
+ruff check app/ --fix
+```
 
 If you are working inside a virtual environment, ensure it is activated before executing the command.
 
