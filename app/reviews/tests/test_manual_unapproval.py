@@ -76,16 +76,12 @@ class ManualUnapprovalTests(TestCase):
         self.assertEqual(
             result["decision"]["status"],
             "blocked",
-            "Manually un-approved revisions should be blocked from auto-approval"
+            "Manually un-approved revisions should be blocked from auto-approval",
         )
-        self.assertIn(
-            "manually un-approved",
-            result["decision"]["reason"].lower()
-        )
+        self.assertIn("manually un-approved", result["decision"]["reason"].lower())
 
         manual_unapproval_test = next(
-            (test for test in result["tests"] if test["id"] == "manual-unapproval"),
-            None
+            (test for test in result["tests"] if test["id"] == "manual-unapproval"), None
         )
         self.assertIsNotNone(manual_unapproval_test)
         self.assertEqual(manual_unapproval_test["status"], "fail")
@@ -134,8 +130,7 @@ class ManualUnapprovalTests(TestCase):
         result = data["results"][0]
 
         manual_unapproval_test = next(
-            (test for test in result["tests"] if test["id"] == "manual-unapproval"),
-            None
+            (test for test in result["tests"] if test["id"] == "manual-unapproval"), None
         )
         self.assertIsNotNone(manual_unapproval_test)
         self.assertEqual(manual_unapproval_test["status"], "ok")
@@ -191,7 +186,7 @@ class ManualUnapprovalTests(TestCase):
         self.assertEqual(
             result["decision"]["status"],
             "blocked",
-            "Manual un-approval should override autoreview rights"
+            "Manual un-approval should override autoreview rights",
         )
 
     @mock.patch("reviews.models.pywikibot.Site")
@@ -207,29 +202,31 @@ class ManualUnapprovalTests(TestCase):
                 return self._data
 
         class FakeSite:
+            def logevents(self, **kwargs):
+                """Mock logevents for block checking."""
+                return []
+
             def simple_request(self, **kwargs):
-                return FakeRequest({
-                    "query": {
-                        "logevents": [
-                            {
-                                "logid": 12345,
-                                "action": "unapprove",
-                                "timestamp": "2025-10-11T10:00:00Z",
-                                "params": {
-                                    "0": 101
-                                }
-                            },
-                            {
-                                "logid": 12344,
-                                "action": "approve",
-                                "timestamp": "2025-10-11T09:00:00Z",
-                                "params": {
-                                    "0": 101
-                                }
-                            }
-                        ]
+                return FakeRequest(
+                    {
+                        "query": {
+                            "logevents": [
+                                {
+                                    "logid": 12345,
+                                    "action": "unapprove",
+                                    "timestamp": "2025-10-11T10:00:00Z",
+                                    "params": {"0": 101},
+                                },
+                                {
+                                    "logid": 12344,
+                                    "action": "approve",
+                                    "timestamp": "2025-10-11T09:00:00Z",
+                                    "params": {"0": 101},
+                                },
+                            ]
+                        }
                     }
-                })
+                )
 
         fake_site = FakeSite()
         mock_site.return_value = fake_site
@@ -252,29 +249,31 @@ class ManualUnapprovalTests(TestCase):
                 return self._data
 
         class FakeSite:
+            def logevents(self, **kwargs):
+                """Mock logevents for block checking."""
+                return []
+
             def simple_request(self, **kwargs):
-                return FakeRequest({
-                    "query": {
-                        "logevents": [
-                            {
-                                "logid": 12346,
-                                "action": "approve",
-                                "timestamp": "2025-10-11T11:00:00Z",
-                                "params": {
-                                    "0": 102
-                                }
-                            },
-                            {
-                                "logid": 12345,
-                                "action": "approve",
-                                "timestamp": "2025-10-11T10:00:00Z",
-                                "params": {
-                                    "0": 101
-                                }
-                            }
-                        ]
+                return FakeRequest(
+                    {
+                        "query": {
+                            "logevents": [
+                                {
+                                    "logid": 12346,
+                                    "action": "approve",
+                                    "timestamp": "2025-10-11T11:00:00Z",
+                                    "params": {"0": 102},
+                                },
+                                {
+                                    "logid": 12345,
+                                    "action": "approve",
+                                    "timestamp": "2025-10-11T10:00:00Z",
+                                    "params": {"0": 101},
+                                },
+                            ]
+                        }
                     }
-                })
+                )
 
         fake_site = FakeSite()
         mock_site.return_value = fake_site
@@ -297,21 +296,25 @@ class ManualUnapprovalTests(TestCase):
                 return self._data
 
         class FakeSite:
+            def logevents(self, **kwargs):
+                """Mock logevents for block checking."""
+                return []
+
             def simple_request(self, **kwargs):
-                return FakeRequest({
-                    "query": {
-                        "logevents": [
-                            {
-                                "logid": 12347,
-                                "action": "unapprove",
-                                "timestamp": "2025-10-11T12:00:00Z",
-                                "params": {
-                                    "0": 999
+                return FakeRequest(
+                    {
+                        "query": {
+                            "logevents": [
+                                {
+                                    "logid": 12347,
+                                    "action": "unapprove",
+                                    "timestamp": "2025-10-11T12:00:00Z",
+                                    "params": {"0": 999},
                                 }
-                            }
-                        ]
+                            ]
+                        }
                     }
-                })
+                )
 
         fake_site = FakeSite()
         mock_site.return_value = fake_site
@@ -319,10 +322,7 @@ class ManualUnapprovalTests(TestCase):
         client = WikiClient(self.wiki)
         result = client.has_manual_unapproval("Test Page", 101)
 
-        self.assertFalse(
-            result,
-            "Should return False when un-approval is for a different revision"
-        )
+        self.assertFalse(result, "Should return False when un-approval is for a different revision")
 
     @mock.patch("reviews.models.pywikibot.Site")
     def test_later_approval_overrides_earlier_unapproval(self, mock_site):
@@ -337,37 +337,37 @@ class ManualUnapprovalTests(TestCase):
                 return self._data
 
         class FakeSite:
+            def logevents(self, **kwargs):
+                """Mock logevents for block checking."""
+                return []
+
             def simple_request(self, **kwargs):
-                return FakeRequest({
-                    "query": {
-                        "logevents": [
-                            {
-                                "logid": 12350,
-                                "action": "approve",
-                                "timestamp": "2025-10-12T10:00:00Z",
-                                "params": {
-                                    "0": 101
-                                }
-                            },
-                            {
-                                "logid": 12349,
-                                "action": "unapprove",
-                                "timestamp": "2025-10-11T10:00:00Z",
-                                "params": {
-                                    "0": 101
-                                }
-                            },
-                            {
-                                "logid": 12348,
-                                "action": "approve",
-                                "timestamp": "2025-10-10T10:00:00Z",
-                                "params": {
-                                    "0": 101
-                                }
-                            }
-                        ]
+                return FakeRequest(
+                    {
+                        "query": {
+                            "logevents": [
+                                {
+                                    "logid": 12350,
+                                    "action": "approve",
+                                    "timestamp": "2025-10-12T10:00:00Z",
+                                    "params": {"0": 101},
+                                },
+                                {
+                                    "logid": 12349,
+                                    "action": "unapprove",
+                                    "timestamp": "2025-10-11T10:00:00Z",
+                                    "params": {"0": 101},
+                                },
+                                {
+                                    "logid": 12348,
+                                    "action": "approve",
+                                    "timestamp": "2025-10-10T10:00:00Z",
+                                    "params": {"0": 101},
+                                },
+                            ]
+                        }
                     }
-                })
+                )
 
         fake_site = FakeSite()
         mock_site.return_value = fake_site
@@ -376,8 +376,7 @@ class ManualUnapprovalTests(TestCase):
         result = client.has_manual_unapproval("Test Page", 101)
 
         self.assertFalse(
-            result,
-            "Should return False when most recent action is approval (not unapproval)"
+            result, "Should return False when most recent action is approval (not unapproval)"
         )
 
     @mock.patch("reviews.models.pywikibot.Site")
@@ -393,21 +392,25 @@ class ManualUnapprovalTests(TestCase):
                 return self._data
 
         class FakeSite:
+            def logevents(self, **kwargs):
+                """Mock logevents for block checking."""
+                return []
+
             def simple_request(self, **kwargs):
-                return FakeRequest({
-                    "query": {
-                        "logevents": [
-                            {
-                                "logid": 12351,
-                                "action": "unapprove2",
-                                "timestamp": "2025-10-13T10:00:00Z",
-                                "params": {
-                                    "0": 102
+                return FakeRequest(
+                    {
+                        "query": {
+                            "logevents": [
+                                {
+                                    "logid": 12351,
+                                    "action": "unapprove2",
+                                    "timestamp": "2025-10-13T10:00:00Z",
+                                    "params": {"0": 102},
                                 }
-                            }
-                        ]
+                            ]
+                        }
                     }
-                })
+                )
 
         fake_site = FakeSite()
         mock_site.return_value = fake_site
@@ -415,7 +418,4 @@ class ManualUnapprovalTests(TestCase):
         client = WikiClient(self.wiki)
         result = client.has_manual_unapproval("Test Page", 102)
 
-        self.assertTrue(
-            result,
-            "Should detect unapprove2 (quality/higher-level un-approval)"
-        )
+        self.assertTrue(result, "Should detect unapprove2 (quality/higher-level un-approval)")
