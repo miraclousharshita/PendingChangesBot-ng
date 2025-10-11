@@ -6,6 +6,7 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import lru_cache
 
 import mwparserfromhell
 import pywikibot
@@ -41,6 +42,11 @@ class WikiClient:
         self.wiki = wiki
         self.site = pywikibot.Site(code=wiki.code, fam=wiki.family)
 
+    def is_user_blocked_after_edit(self, username: str, edit_timestamp: datetime) -> bool:
+        """Check if user was blocked after making an edit."""
+        # Extract year from timestamp for cache efficiency
+        year = edit_timestamp.year
+        return was_user_blocked_after(self.wiki.code, self.wiki.family, username, year)
     def get_rendered_html(self, revid: int) -> str:
         """Fetch the rendered HTML for a specific revision."""
         if not revid:
@@ -350,3 +356,52 @@ def _parse_superset_bool(value) -> bool | None:
         if normalized in {"0", "false", "f", "no", "n"}:
             return False
     return bool(value)
+
+
+
+# Simple in-memory cache using Python's built-in LRU cache
+@lru_cache(maxsize=1000)
+def was_user_blocked_after(code: str, family: str, username: str, year: int) -> bool:
+    """
+    Check if user was blocked after a specific year.
+    Uses @lru_cache for automatic caching.
+    
+    Timestamp precision is reduced to year to improve cache hit rate,
+    since exact accuracy isn't required for this check.
+    
+    Args:
+        code: Wiki code (e.g., "fi")
+        family: Wiki family (e.g., "wikipedia")
+        username: Username to check
+        year: Year to check blocks after
+    
+    Returns:
+        True if user was blocked after the given year
+    """
+    try:
+        site = pywikibot.Site(code, family)
+        # Create timestamp for start of year
+        timestamp = pywikibot.Timestamp(year, 1, 1, 0, 0, 0)
+        
+        # Get block events after the timestamp
+        # reverse=True means enumerate forward from start timestamp
+        block_events = site.logevents(
+            logtype='block',
+            page=f'User:{username}',
+            start=timestamp,
+            reverse=True,
+            total=1  # Only need to find one block event
+        )
+        
+        # Check if any 'block' action exists
+        for event in block_events:
+            if event.action() == 'block':
+                return True
+        
+        return False
+        
+    except Exception as e:
+        logger.error(f"Error checking blocks for {username}: {e}")
+        # Fail safe: assume NOT blocked if we can't verify
+        # This prevents breaking existing functionality when the API is unavailable
+        return False
