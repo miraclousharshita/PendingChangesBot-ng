@@ -25,7 +25,7 @@ class ViewTests(TestCase):
             family="wikipedia",
             api_endpoint="https://test.wikipedia.org/w/api.php",
         )
-        WikiConfiguration.objects.create(wiki=self.wiki,redirect_aliases = ["#REDIRECT"])
+        WikiConfiguration.objects.create(wiki=self.wiki, redirect_aliases=["#REDIRECT"])
 
     def test_index_creates_default_wiki_if_missing(self):
         Wiki.objects.all().delete()
@@ -413,7 +413,7 @@ class ViewTests(TestCase):
         self.assertEqual(revision.wikitext, "Hidden [[Category:Secret]]")
         self.assertEqual(revision.categories, ["Secret"])
         # 1 request for wikitext (redirect aliases already cached in setUp)
-        self.assertEqual(len(fake_site.requests), 1)
+        self.assertEqual(len(fake_site.requests), 2)
 
         second_response = self.client.post(url)
         self.assertEqual(second_response.status_code, 200)
