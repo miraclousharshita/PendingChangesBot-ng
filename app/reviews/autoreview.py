@@ -84,7 +84,41 @@ def _evaluate_revision(
 ) -> dict:
     tests: list[dict] = []
 
-    # Test 1: Bot editors can always be auto-approved.
+    # Test 1: Check if revision has been manually un-approved by a human reviewer
+    is_manually_unapproved = client.has_manual_unapproval(
+        revision.page.title, revision.revid
+    )
+    if is_manually_unapproved:
+        tests.append(
+            {
+                "id": "manual-unapproval",
+                "title": "Manual un-approval check",
+                "status": "fail",
+                "message": (
+                    "This revision was manually un-approved by a human reviewer "
+                    "and should not be auto-approved."
+                ),
+            }
+        )
+        return {
+            "tests": tests,
+            "decision": AutoreviewDecision(
+                status="blocked",
+                label="Cannot be auto-approved",
+                reason="Revision was manually un-approved by a human reviewer.",
+            ),
+        }
+    else:
+        tests.append(
+            {
+                "id": "manual-unapproval",
+                "title": "Manual un-approval check",
+                "status": "ok",
+                "message": "This revision has not been manually un-approved.",
+            }
+        )
+
+    # Test 2: Bot editors can always be auto-approved.
     if _is_bot_user(revision, profile):
         tests.append(
             {
@@ -112,7 +146,7 @@ def _evaluate_revision(
             }
         )
 
-    # Test 2: Autoapproved editors can always be auto-approved.
+    # Test 3: Autoapproved editors can always be auto-approved.
     if auto_groups:
         matched_groups = _matched_user_groups(
             revision, profile, allowed_groups=auto_groups
@@ -177,7 +211,7 @@ def _evaluate_revision(
                 }
             )
 
-    # Test 3: Do not approve article to redirect conversions
+    # Test 4: Do not approve article to redirect conversions
     is_redirect_conversion = _is_article_to_redirect_conversion(
         revision, redirect_aliases
     )
@@ -223,7 +257,7 @@ def _evaluate_revision(
             ),
         }
 
-    # Test 4: Blocking categories on the old version prevent automatic approval.
+    # Test 5: Blocking categories on the old version prevent automatic approval.
     blocking_hits = _blocking_category_hits(revision, blocking_categories)
     if blocking_hits:
         tests.append(
@@ -254,7 +288,7 @@ def _evaluate_revision(
         }
     )
 
-    # Test 4: Check for new rendering errors in the HTML.
+    # Test 6: Check for new rendering errors in the HTML.
     new_render_errors = _check_for_new_render_errors(revision, client)
     if new_render_errors:
         tests.append(
