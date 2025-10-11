@@ -410,7 +410,7 @@ class ViewTests(TestCase):
         self.assertEqual(result["tests"][4]["id"], "blocking-categories")
 
         revision.refresh_from_db()
-        self.assertEqual(revision.wikitext, "Hidden [[Category:Secret]]")
+        self.assertEqual(revision.wikitext, "Hiddesdsn [[Category:Secret]]")
         self.assertEqual(revision.categories, ["Secret"])
         # 1 request for wikitext (redirect aliases already cached in setUp)
         self.assertEqual(len(fake_site.requests), 2)
