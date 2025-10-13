@@ -83,7 +83,7 @@ Before installing or running the application, ensure you have:
    ```bash
    python3 --version
    ```
-   Install if not found *for python3 you need to install pip3 
+   Install if not found *for python3 you need to install pip3
 4. **Create and activate a virtual environment** (recommended)
    ```bash
    python3 -m venv venv
@@ -114,7 +114,7 @@ the steps below once per user account that will run PendingChangesBot:
 
 1. **Create a Pywikibot configuration**
    ```bash
-   ce app
+   cd app
    echo "usernames['meta']['meta'] = 'WIKIMEDIA_USERNAME'" > user-config.py
    ```
 
