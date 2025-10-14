@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from reviews import autoreview
 from reviews.autoreview import (
+    _check_ores_scores,
     _find_invalid_isbns,
     _validate_isbn_10,
     _validate_isbn_13,
@@ -288,3 +290,303 @@ class AutoreviewBlockedUserTests(TestCase):
 
         # Verify logevents was called with correct parameters
         mock_site_instance.logevents.assert_called_once()
+
+
+class OresScoreTests(TestCase):
+    """Test ORES damaging and goodfaith score checks."""
+
+    @patch("reviews.autoreview.http.fetch")
+    def test_ores_damaging_score_exceeds_threshold(self, mock_fetch):
+        """Test that high damaging score blocks auto-approval."""
+        # Mock ORES API response with high damaging score
+        mock_response = Mock()
+        mock_response.headers = {}
+        mock_response.text = json.dumps(
+            {
+                "fiwiki": {
+                    "scores": {
+                        "12345": {
+                            "damaging": {
+                                "score": {
+                                    "prediction": True,
+                                    "probability": {"true": 0.85, "false": 0.15},
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        )
+        mock_fetch.return_value = mock_response
+
+        # Create mock revision
+        mock_revision = MagicMock()
+        mock_revision.revid = 12345
+        mock_revision.page.wiki.code = "fi"
+        mock_revision.page.wiki.family = "wikipedia"
+
+        # Check with threshold of 0.7
+        result = _check_ores_scores(mock_revision, damaging_threshold=0.7, goodfaith_threshold=0.0)
+
+        self.assertTrue(result["should_block"])
+        self.assertEqual(result["test"]["status"], "fail")
+        self.assertIn("0.850", result["test"]["message"])
+
+    @patch("reviews.autoreview.http.fetch")
+    def test_ores_goodfaith_score_below_threshold(self, mock_fetch):
+        """Test that low goodfaith score blocks auto-approval."""
+        # Mock ORES API response with low goodfaith score
+        mock_response = Mock()
+        mock_response.headers = {}
+        mock_response.text = json.dumps(
+            {
+                "fiwiki": {
+                    "scores": {
+                        "12345": {
+                            "goodfaith": {
+                                "score": {
+                                    "prediction": False,
+                                    "probability": {"true": 0.3, "false": 0.7},
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        )
+        mock_fetch.return_value = mock_response
+
+        # Create mock revision
+        mock_revision = MagicMock()
+        mock_revision.revid = 12345
+        mock_revision.page.wiki.code = "fi"
+        mock_revision.page.wiki.family = "wikipedia"
+
+        # Check with threshold of 0.5
+        result = _check_ores_scores(mock_revision, damaging_threshold=0.0, goodfaith_threshold=0.5)
+
+        self.assertTrue(result["should_block"])
+        self.assertEqual(result["test"]["status"], "fail")
+        self.assertIn("0.300", result["test"]["message"])
+
+    @patch("reviews.autoreview.http.fetch")
+    def test_ores_scores_within_thresholds(self, mock_fetch):
+        """Test that good scores pass the check."""
+        # Mock ORES API response with good scores
+        mock_response = Mock()
+        mock_response.headers = {}
+        mock_response.text = json.dumps(
+            {
+                "fiwiki": {
+                    "scores": {
+                        "12345": {
+                            "damaging": {
+                                "score": {
+                                    "prediction": False,
+                                    "probability": {"true": 0.02, "false": 0.98},
+                                }
+                            },
+                            "goodfaith": {
+                                "score": {
+                                    "prediction": True,
+                                    "probability": {"true": 0.999, "false": 0.001},
+                                }
+                            },
+                        }
+                    }
+                }
+            }
+        )
+        mock_fetch.return_value = mock_response
+
+        # Create mock revision
+        mock_revision = MagicMock()
+        mock_revision.revid = 12345
+        mock_revision.page.wiki.code = "fi"
+        mock_revision.page.wiki.family = "wikipedia"
+
+        # Check with reasonable thresholds
+        result = _check_ores_scores(mock_revision, damaging_threshold=0.7, goodfaith_threshold=0.5)
+
+        self.assertFalse(result["should_block"])
+        self.assertEqual(result["test"]["status"], "ok")
+        self.assertIn("damaging: 0.020", result["test"]["message"])
+        self.assertIn("goodfaith: 0.999", result["test"]["message"])
+
+    def test_ores_checks_disabled_when_thresholds_zero(self):
+        """Test that ORES checks are skipped when thresholds are 0.0."""
+        mock_revision = MagicMock()
+        mock_revision.revid = 12345
+        mock_revision.page.wiki.code = "fi"
+        mock_revision.page.wiki.family = "wikipedia"
+
+        result = _check_ores_scores(mock_revision, damaging_threshold=0.0, goodfaith_threshold=0.0)
+
+        self.assertFalse(result["should_block"])
+        self.assertEqual(result["test"]["status"], "skip")
+        self.assertIn("disabled", result["test"]["message"])
+
+    @patch("reviews.autoreview.http.fetch")
+    def test_ores_api_error_blocks_approval(self, mock_fetch):
+        """Test that ORES API errors block auto-approval (safe default)."""
+        # Mock API error
+        mock_fetch.side_effect = Exception("API connection failed")
+
+        # Create mock revision
+        mock_revision = MagicMock()
+        mock_revision.revid = 12345
+        mock_revision.page.wiki.code = "fi"
+        mock_revision.page.wiki.family = "wikipedia"
+
+        result = _check_ores_scores(mock_revision, damaging_threshold=0.7, goodfaith_threshold=0.5)
+
+        self.assertTrue(result["should_block"])
+        self.assertEqual(result["test"]["status"], "fail")
+        self.assertIn("Could not verify", result["test"]["message"])
+
+    @patch("reviews.autoreview.http.fetch")
+    def test_ores_only_damaging_check_enabled(self, mock_fetch):
+        """Test checking only damaging score when goodfaith threshold is 0."""
+        mock_response = Mock()
+        mock_response.headers = {}
+        mock_response.text = json.dumps(
+            {
+                "fiwiki": {
+                    "scores": {
+                        "12345": {
+                            "damaging": {
+                                "score": {
+                                    "prediction": False,
+                                    "probability": {"true": 0.05, "false": 0.95},
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        )
+        mock_fetch.return_value = mock_response
+
+        mock_revision = MagicMock()
+        mock_revision.revid = 12345
+        mock_revision.page.wiki.code = "fi"
+        mock_revision.page.wiki.family = "wikipedia"
+
+        result = _check_ores_scores(mock_revision, damaging_threshold=0.7, goodfaith_threshold=0.0)
+
+        self.assertFalse(result["should_block"])
+        self.assertEqual(result["test"]["status"], "ok")
+        self.assertIn("damaging: 0.050", result["test"]["message"])
+        self.assertNotIn("goodfaith", result["test"]["message"])
+
+    @patch("reviews.autoreview.http.fetch")
+    def test_ores_only_goodfaith_check_enabled(self, mock_fetch):
+        """Test checking only goodfaith score when damaging threshold is 0."""
+        mock_response = Mock()
+        mock_response.headers = {}
+        mock_response.text = json.dumps(
+            {
+                "fiwiki": {
+                    "scores": {
+                        "12345": {
+                            "goodfaith": {
+                                "score": {
+                                    "prediction": True,
+                                    "probability": {"true": 0.95, "false": 0.05},
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        )
+        mock_fetch.return_value = mock_response
+
+        mock_revision = MagicMock()
+        mock_revision.revid = 12345
+        mock_revision.page.wiki.code = "fi"
+        mock_revision.page.wiki.family = "wikipedia"
+
+        result = _check_ores_scores(mock_revision, damaging_threshold=0.0, goodfaith_threshold=0.5)
+
+        self.assertFalse(result["should_block"])
+        self.assertEqual(result["test"]["status"], "ok")
+        self.assertIn("goodfaith: 0.950", result["test"]["message"])
+        self.assertNotIn("damaging", result["test"]["message"])
+
+    @override_settings(ORES_DAMAGING_THRESHOLD=0.7, ORES_GOODFAITH_THRESHOLD=0.5)
+    @patch("reviews.services.pywikibot.Site")
+    @patch("reviews.autoreview.http.fetch")
+    @patch("reviews.autoreview._is_bot_user")
+    def test_ores_integration_in_evaluate_revision(self, mock_is_bot, mock_fetch, mock_site):
+        """Test ORES check integration in _evaluate_revision."""
+        mock_is_bot.return_value = False
+
+        # Mock pywikibot.Site for WikiClient
+        mock_site_instance = MagicMock()
+        mock_site.return_value = mock_site_instance
+        mock_site_instance.logevents.return_value = []
+
+        # Mock ORES API response with high damaging score
+        mock_response = Mock()
+        mock_response.headers = {}
+        mock_response.text = json.dumps(
+            {
+                "fiwiki": {
+                    "scores": {
+                        "12345": {
+                            "damaging": {
+                                "score": {
+                                    "prediction": True,
+                                    "probability": {"true": 0.85, "false": 0.15},
+                                }
+                            },
+                            "goodfaith": {
+                                "score": {
+                                    "prediction": False,
+                                    "probability": {"true": 0.2, "false": 0.8},
+                                }
+                            },
+                        }
+                    }
+                }
+            }
+        )
+        mock_fetch.return_value = mock_response
+
+        # Create mock objects
+        mock_wiki = MagicMock()
+        mock_wiki.code = "fi"
+        mock_wiki.family = "wikipedia"
+        mock_wiki.configuration.ores_damaging_threshold = 0.7
+        mock_wiki.configuration.ores_goodfaith_threshold = 0.5
+
+        mock_page = MagicMock()
+        mock_page.wiki = mock_wiki
+        mock_page.title = "Test Page"
+        mock_page.categories = []
+
+        mock_revision = MagicMock()
+        mock_revision.revid = 12345
+        mock_revision.page = mock_page
+        mock_revision.user_name = "TestUser"
+        mock_revision.timestamp = datetime.fromisoformat("2024-01-15T10:00:00")
+        mock_revision.get_wikitext.return_value = "Test content"
+
+        from reviews.services import WikiClient
+
+        mock_client = WikiClient(mock_wiki)
+
+        # Call _evaluate_revision
+        result = autoreview._evaluate_revision(
+            mock_revision,
+            mock_client,
+            None,
+            auto_groups={},
+            blocking_categories={},
+            redirect_aliases=[],
+        )
+
+        # Should be blocked due to high damaging score
+        self.assertEqual(result["decision"].status, "blocked")
+        self.assertTrue(any(t["id"] == "ores-scores" for t in result["tests"]))

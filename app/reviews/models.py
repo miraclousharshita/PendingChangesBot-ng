@@ -5,6 +5,7 @@ import os
 from datetime import timedelta
 
 import pywikibot
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 
@@ -47,6 +48,26 @@ class WikiConfiguration(models.Model):
             "Cached redirect magic word aliases from wiki API "
             "(i.e: https://fi.wikipedia.org/w/api.php?"
             "action=query&meta=siteinfo&siprop=magicwords)"
+        ),
+    )
+    ores_damaging_threshold = models.FloatField(
+        null=True,
+        blank=True,
+        default=0.0,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text=(
+            "ORES damaging model threshold (0.0-1.0). "
+            "Edits with damaging probability above this will not be auto-approved. "
+        ),
+    )
+    ores_goodfaith_threshold = models.FloatField(
+        null=True,
+        blank=True,
+        default=0.0,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text=(
+            "ORES goodfaith model threshold (0.0-1.0). "
+            "Edits with goodfaith probability below this will not be auto-approved. "
         ),
     )
     updated_at = models.DateTimeField(auto_now=True)

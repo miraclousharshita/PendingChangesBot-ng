@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from collections.abc import Iterable
@@ -9,6 +10,8 @@ from dataclasses import dataclass
 
 import pywikibot
 from bs4 import BeautifulSoup
+from django.conf import settings
+from pywikibot.comms import http
 
 from .models import EditorProfile, PendingPage, PendingRevision, Wiki
 from .services import WikiClient
@@ -383,6 +386,30 @@ def _evaluate_revision(
         }
     )
 
+    # Test 9: Check ORES edit quality scores
+    configuration = revision.page.wiki.configuration
+    damaging_threshold = configuration.ores_damaging_threshold
+    if damaging_threshold == 0.0:
+        damaging_threshold = settings.ORES_DAMAGING_THRESHOLD
+
+    goodfaith_threshold = configuration.ores_goodfaith_threshold
+    if goodfaith_threshold == 0.0:
+        goodfaith_threshold = settings.ORES_GOODFAITH_THRESHOLD
+
+    if damaging_threshold > 0 or goodfaith_threshold > 0:
+        ores_result = _check_ores_scores(revision, damaging_threshold, goodfaith_threshold)
+        tests.append(ores_result["test"])
+
+        if ores_result["should_block"]:
+            return {
+                "tests": tests,
+                "decision": AutoreviewDecision(
+                    status="blocked",
+                    label="Cannot be auto-approved",
+                    reason="ORES edit quality scores indicate potential issues.",
+                ),
+            }
+
     return {
         "tests": tests,
         "decision": AutoreviewDecision(
@@ -696,3 +723,99 @@ def _find_invalid_isbns(text: str) -> list[str]:
             invalid_isbns.append(isbn_raw.strip())
 
     return invalid_isbns
+
+
+def _check_ores_scores(
+    revision: PendingRevision,
+    damaging_threshold: float,
+    goodfaith_threshold: float,
+) -> dict:
+    """Check ORES damaging and goodfaith scores for a revision."""
+    wiki_code = revision.page.wiki.code
+    wiki_family = revision.page.wiki.family
+    ores_wiki = f"{wiki_code}{wiki_family[0:4]}"
+    base_url = "https://ores.wikimedia.org/v3/scores"
+    models_to_check = []
+
+    if damaging_threshold > 0:
+        models_to_check.append("damaging")
+    if goodfaith_threshold > 0:
+        models_to_check.append("goodfaith")
+
+    models_param = "|".join(models_to_check)
+    url = f"{base_url}/{ores_wiki}/{revision.revid}?models={models_param}"
+
+    try:
+        response = http.fetch(url, headers={"User-Agent": "PendingChangesBot/1.0"})
+        data = json.loads(response.text)
+        scores = data.get(ores_wiki, {}).get("scores", {}).get(str(revision.revid), {})
+
+        if damaging_threshold > 0:
+            damaging_data = scores.get("damaging", {}).get("score", {})
+            damaging_prob = damaging_data.get("probability", {}).get("true", 0.0)
+
+            if damaging_prob > damaging_threshold:
+                return {
+                    "should_block": True,
+                    "test": {
+                        "id": "ores-scores",
+                        "title": "ORES edit quality scores",
+                        "status": "fail",
+                        "message": (
+                            f"ORES damaging score ({damaging_prob:.3f}) exceeds threshold "
+                            f"({damaging_threshold:.3f})."
+                        ),
+                    },
+                }
+
+        if goodfaith_threshold > 0:
+            goodfaith_data = scores.get("goodfaith", {}).get("score", {})
+            goodfaith_prob = goodfaith_data.get("probability", {}).get("true", 1.0)
+
+            if goodfaith_prob < goodfaith_threshold:
+                return {
+                    "should_block": True,
+                    "test": {
+                        "id": "ores-scores",
+                        "title": "ORES edit quality scores",
+                        "status": "fail",
+                        "message": (
+                            f"ORES goodfaith score ({goodfaith_prob:.3f}) is below threshold "
+                            f"({goodfaith_threshold:.3f})."
+                        ),
+                    },
+                }
+
+        messages = []
+        if damaging_threshold > 0:
+            damaging_prob = (
+                scores.get("damaging", {}).get("score", {}).get("probability", {}).get("true", 0.0)
+            )
+            messages.append(f"damaging: {damaging_prob:.3f}")
+        if goodfaith_threshold > 0:
+            goodfaith_prob = (
+                scores.get("goodfaith", {}).get("score", {}).get("probability", {}).get("true", 1.0)
+            )
+            messages.append(f"goodfaith: {goodfaith_prob:.3f}")
+
+        return {
+            "should_block": False,
+            "test": {
+                "id": "ores-scores",
+                "title": "ORES edit quality scores",
+                "status": "ok",
+                "message": f"ORES scores are within acceptable thresholds ({', '.join(messages)}).",
+            },
+        }
+
+    except Exception as e:
+        logger.error(f"Error checking ORES scores for revision {revision.revid}: {e}")
+        return {
+            "should_block": True,
+            "test": {
+                "id": "ores-scores",
+                "title": "ORES edit quality check failed",
+                "status": "fail",
+                "message": "Could not verify ORES edit quality scores.",
+            },
+        }
