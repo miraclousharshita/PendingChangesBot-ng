@@ -440,12 +440,17 @@ class ViewTests(TestCase):
 
     @mock.patch("reviews.models.pywikibot.Site")
     @mock.patch("reviews.services.pywikibot.Site")
+    @mock.patch("reviews.autoreview.is_living_person")
+    @mock.patch("reviews.autoreview.logger")
     def test_api_autoreview_requires_manual_review_when_no_rules_apply(
-        self, mock_service_site, mock_model_site
+        self, mock_logger, mock_is_living, mock_service_site, mock_model_site
     ):
+        mock_is_living.return_value = False  # Mock to prevent pywikibot calls
         mock_service_site.return_value.simple_request.return_value.submit.return_value = {
             "parse": {"text": "<p>No errors</p>"}
         }
+        mock_service_site.return_value.logevents.return_value = []  # No block events
+
         page = PendingPage.objects.create(
             wiki=self.wiki,
             pageid=103,
@@ -474,11 +479,15 @@ class ViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         result = response.json()["results"][0]
         self.assertEqual(result["decision"]["status"], "manual")
-        self.assertEqual(len(result["tests"]), 8)
+        self.assertEqual(len(result["tests"]), 9)  # Updated to 9 (includes ORES test)
         self.assertEqual(result["tests"][-1]["status"], "ok")
 
     @mock.patch("reviews.services.pywikibot.Site")
-    def test_api_autoreview_orders_revisions_from_oldest_to_newest(self, mock_site):
+    @mock.patch("reviews.autoreview.is_living_person", return_value=False)
+    @mock.patch("reviews.autoreview.logger")
+    def test_api_autoreview_orders_revisions_from_oldest_to_newest(
+        self, mock_logger, mock_is_living, mock_site
+    ):
         page = PendingPage.objects.create(
             wiki=self.wiki,
             pageid=104,
