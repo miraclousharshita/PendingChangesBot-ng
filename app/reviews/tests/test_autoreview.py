@@ -427,7 +427,8 @@ class OresScoreTests(TestCase):
         self.assertIn("disabled", result["test"]["message"])
 
     @patch("reviews.autoreview.http.fetch")
-    def test_ores_api_error_blocks_approval(self, mock_fetch):
+    @patch("reviews.autoreview.logger")  # Mock logger to suppress error logs
+    def test_ores_api_error_blocks_approval(self, mock_logger, mock_fetch):
         """Test that ORES API errors block auto-approval (safe default)."""
         # Mock API error
         mock_fetch.side_effect = Exception("API connection failed")
@@ -443,6 +444,9 @@ class OresScoreTests(TestCase):
         self.assertTrue(result["should_block"])
         self.assertEqual(result["test"]["status"], "fail")
         self.assertIn("Could not verify", result["test"]["message"])
+
+        # Verify logger.error was called
+        mock_logger.error.assert_called_once()
 
     @patch("reviews.autoreview.http.fetch")
     def test_ores_only_damaging_check_enabled(self, mock_fetch):
@@ -518,9 +522,29 @@ class OresScoreTests(TestCase):
     @patch("reviews.services.pywikibot.Site")
     @patch("reviews.autoreview.http.fetch")
     @patch("reviews.autoreview._is_bot_user")
-    def test_ores_integration_in_evaluate_revision(self, mock_is_bot, mock_fetch, mock_site):
+    @patch("reviews.autoreview.logger")
+    @patch("reviews.autoreview._get_parent_wikitext")
+    @patch("reviews.autoreview.PendingRevision.objects.filter")
+    @patch("reviews.autoreview.is_living_person")
+    def test_ores_integration_in_evaluate_revision(
+        self,
+        mock_is_living,
+        mock_filter,
+        mock_get_parent,
+        mock_logger,
+        mock_is_bot,
+        mock_fetch,
+        mock_site,
+    ):
         """Test ORES check integration in _evaluate_revision."""
         mock_is_bot.return_value = False
+        mock_is_living.return_value = False  # Not a living person article
+        mock_get_parent.return_value = ""  # No parent wikitext
+
+        # Mock PendingRevision.objects.filter to return empty queryset
+        mock_queryset = MagicMock()
+        mock_queryset.order_by.return_value.first.return_value = None
+        mock_filter.return_value = mock_queryset
 
         # Mock pywikibot.Site for WikiClient
         mock_site_instance = MagicMock()
@@ -568,14 +592,22 @@ class OresScoreTests(TestCase):
 
         mock_revision = MagicMock()
         mock_revision.revid = 12345
+        mock_revision.id = 12345  # Add id attribute to fix Field 'id' error
         mock_revision.page = mock_page
         mock_revision.user_name = "TestUser"
         mock_revision.timestamp = datetime.fromisoformat("2024-01-15T10:00:00")
         mock_revision.get_wikitext.return_value = "Test content"
+        mock_revision.get_categories.return_value = []
+        mock_revision.superset_data = {}
+        mock_revision.parentid = None
+        mock_revision.render_error_count = 0
 
         from reviews.services import WikiClient
 
-        mock_client = WikiClient(mock_wiki)
+        mock_client = MagicMock(spec=WikiClient)
+        mock_client.has_manual_unapproval.return_value = False
+        mock_client.is_user_blocked_after_edit.return_value = False
+        mock_client.get_rendered_html.return_value = "<html></html>"
 
         # Call _evaluate_revision
         result = autoreview._evaluate_revision(
@@ -590,6 +622,9 @@ class OresScoreTests(TestCase):
         # Should be blocked due to high damaging score
         self.assertEqual(result["decision"].status, "blocked")
         self.assertTrue(any(t["id"] == "ores-scores" for t in result["tests"]))
+
+        # Verify no error logs were produced (logger.error should not be called)
+        mock_logger.error.assert_not_called()
 
 
 class SupersededAdditionsTests(TestCase):
