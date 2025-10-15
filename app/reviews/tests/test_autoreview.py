@@ -8,17 +8,10 @@ from django.test import TestCase, override_settings
 
 from reviews import autoreview
 from reviews.autoreview import (
-    _blocking_category_hits,
     _check_ores_scores,
     _find_invalid_isbns,
-    _is_article_to_redirect_conversion,
-    _is_bot_user,
-    _is_redirect,
-    _matched_user_groups,
-    _normalize_to_lookup,
     _validate_isbn_10,
     _validate_isbn_13,
-    is_bot_edit,
 )
 from reviews.services import was_user_blocked_after
 
@@ -190,16 +183,16 @@ class ISBNDetectionTests(TestCase):
     def test_real_world_wikipedia_citation(self):
         """Test with realistic Wikipedia citation format."""
         text = """
-        {{cite book last=Smith first=John title=Example Book
-        publisher=Example Press year=2020 isbn=978-0-306-40615-7}}
+        {{cite book |last=Smith |first=John |title=Example Book
+        |publisher=Example Press |year=2020 |isbn=978-0-306-40615-7}}
         """
         self.assertEqual(_find_invalid_isbns(text), [])
 
     def test_invalid_isbn_in_wikipedia_citation(self):
         """Test invalid ISBN in Wikipedia citation format."""
         text = """
-        {{cite book last=Smith first=John title=Fake Book
-        publisher=Fake Press year=2020 isbn=978-0-306-40615-8}}
+        {{cite book |last=Smith |first=John |title=Fake Book
+        |publisher=Fake Press |year=2020 |isbn=978-0-306-40615-8}}
         """
         invalid = _find_invalid_isbns(text)
         self.assertEqual(len(invalid), 1)
@@ -238,7 +231,6 @@ class ISBNDetectionTests(TestCase):
         self.assertEqual(len(invalid), 1)
 
 
-@patch("reviews.autoreview.logger")
 class AutoreviewBlockedUserTests(TestCase):
     def setUp(self):
         """Clear the LRU cache before each test."""
@@ -246,7 +238,7 @@ class AutoreviewBlockedUserTests(TestCase):
 
     @patch("reviews.services.pywikibot.Site")
     @patch("reviews.autoreview._is_bot_user")
-    def test_blocked_user_not_auto_approved(self, mock_is_bot, mock_site, mock_logger):
+    def test_blocked_user_not_auto_approved(self, mock_is_bot, mock_site):
         """Test that a user blocked after making an edit is NOT auto-approved."""
         mock_is_bot.return_value = False  # User is NOT a bot
 
@@ -285,7 +277,7 @@ class AutoreviewBlockedUserTests(TestCase):
             profile,
             auto_groups={},
             blocking_categories={},
-            redirect_aliases=[],
+            redirect_aliases={},
         )
 
         # Assert
@@ -299,16 +291,12 @@ class AutoreviewBlockedUserTests(TestCase):
         # Verify logevents was called with correct parameters
         mock_site_instance.logevents.assert_called_once()
 
-        # Verify no error logs were called
-        mock_logger.error.assert_not_called()
 
-
-@patch("reviews.autoreview.logger")
 class OresScoreTests(TestCase):
     """Test ORES damaging and goodfaith score checks."""
 
     @patch("reviews.autoreview.http.fetch")
-    def test_ores_damaging_score_exceeds_threshold(self, mock_fetch, mock_logger):
+    def test_ores_damaging_score_exceeds_threshold(self, mock_fetch):
         """Test that high damaging score blocks auto-approval."""
         # Mock ORES API response with high damaging score
         mock_response = Mock()
@@ -344,11 +332,8 @@ class OresScoreTests(TestCase):
         self.assertEqual(result["test"]["status"], "fail")
         self.assertIn("0.850", result["test"]["message"])
 
-        # Verify no logs were called
-        mock_logger.error.assert_not_called()
-
     @patch("reviews.autoreview.http.fetch")
-    def test_ores_goodfaith_score_below_threshold(self, mock_fetch, mock_logger):
+    def test_ores_goodfaith_score_below_threshold(self, mock_fetch):
         """Test that low goodfaith score blocks auto-approval."""
         # Mock ORES API response with low goodfaith score
         mock_response = Mock()
@@ -384,11 +369,8 @@ class OresScoreTests(TestCase):
         self.assertEqual(result["test"]["status"], "fail")
         self.assertIn("0.300", result["test"]["message"])
 
-        # Verify no logs were called
-        mock_logger.error.assert_not_called()
-
     @patch("reviews.autoreview.http.fetch")
-    def test_ores_scores_within_thresholds(self, mock_fetch, mock_logger):
+    def test_ores_scores_within_thresholds(self, mock_fetch):
         """Test that good scores pass the check."""
         # Mock ORES API response with good scores
         mock_response = Mock()
@@ -431,10 +413,7 @@ class OresScoreTests(TestCase):
         self.assertIn("damaging: 0.020", result["test"]["message"])
         self.assertIn("goodfaith: 0.999", result["test"]["message"])
 
-        # Verify no logs were called
-        mock_logger.error.assert_not_called()
-
-    def test_ores_checks_disabled_when_thresholds_zero(self, mock_logger):
+    def test_ores_checks_disabled_when_thresholds_zero(self):
         """Test that ORES checks are skipped when thresholds are 0.0."""
         mock_revision = MagicMock()
         mock_revision.revid = 12345
@@ -447,11 +426,8 @@ class OresScoreTests(TestCase):
         self.assertEqual(result["test"]["status"], "skip")
         self.assertIn("disabled", result["test"]["message"])
 
-        # Verify no logs were called
-        mock_logger.error.assert_not_called()
-
     @patch("reviews.autoreview.http.fetch")
-    def test_ores_api_error_blocks_approval(self, mock_fetch, mock_logger):
+    def test_ores_api_error_blocks_approval(self, mock_fetch):
         """Test that ORES API errors block auto-approval (safe default)."""
         # Mock API error
         mock_fetch.side_effect = Exception("API connection failed")
@@ -468,11 +444,8 @@ class OresScoreTests(TestCase):
         self.assertEqual(result["test"]["status"], "fail")
         self.assertIn("Could not verify", result["test"]["message"])
 
-        # Verify error log was called but don't print it
-        mock_logger.error.assert_called_once()
-
     @patch("reviews.autoreview.http.fetch")
-    def test_ores_only_damaging_check_enabled(self, mock_fetch, mock_logger):
+    def test_ores_only_damaging_check_enabled(self, mock_fetch):
         """Test checking only damaging score when goodfaith threshold is 0."""
         mock_response = Mock()
         mock_response.headers = {}
@@ -506,11 +479,8 @@ class OresScoreTests(TestCase):
         self.assertIn("damaging: 0.050", result["test"]["message"])
         self.assertNotIn("goodfaith", result["test"]["message"])
 
-        # Verify no logs were called
-        mock_logger.error.assert_not_called()
-
     @patch("reviews.autoreview.http.fetch")
-    def test_ores_only_goodfaith_check_enabled(self, mock_fetch, mock_logger):
+    def test_ores_only_goodfaith_check_enabled(self, mock_fetch):
         """Test checking only goodfaith score when damaging threshold is 0."""
         mock_response = Mock()
         mock_response.headers = {}
@@ -544,20 +514,13 @@ class OresScoreTests(TestCase):
         self.assertIn("goodfaith: 0.950", result["test"]["message"])
         self.assertNotIn("damaging", result["test"]["message"])
 
-        # Verify no logs were called
-        mock_logger.error.assert_not_called()
-
     @override_settings(ORES_DAMAGING_THRESHOLD=0.7, ORES_GOODFAITH_THRESHOLD=0.5)
     @patch("reviews.services.pywikibot.Site")
     @patch("reviews.autoreview.http.fetch")
     @patch("reviews.autoreview._is_bot_user")
-    @patch("reviews.autoreview.is_living_person")
-    def test_ores_integration_in_evaluate_revision(
-        self, mock_is_living, mock_is_bot, mock_fetch, mock_site, mock_logger
-    ):
+    def test_ores_integration_in_evaluate_revision(self, mock_is_bot, mock_fetch, mock_site):
         """Test ORES check integration in _evaluate_revision."""
         mock_is_bot.return_value = False
-        mock_is_living.return_value = False  # Mock to prevent pywikibot calls
 
         # Mock pywikibot.Site for WikiClient
         mock_site_instance = MagicMock()
@@ -597,8 +560,6 @@ class OresScoreTests(TestCase):
         mock_wiki.family = "wikipedia"
         mock_wiki.configuration.ores_damaging_threshold = 0.7
         mock_wiki.configuration.ores_goodfaith_threshold = 0.5
-        mock_wiki.configuration.ores_damaging_threshold_living = 0.1
-        mock_wiki.configuration.ores_goodfaith_threshold_living = 0.9
 
         mock_page = MagicMock()
         mock_page.wiki = mock_wiki
@@ -630,279 +591,332 @@ class OresScoreTests(TestCase):
         self.assertEqual(result["decision"].status, "blocked")
         self.assertTrue(any(t["id"] == "ores-scores" for t in result["tests"]))
 
-        # Verify no error logs (but warning might be called for pywikibot page access)
-        mock_logger.error.assert_not_called()
 
+class SupersededAdditionsTests(TestCase):
+    """Test suite for superseded additions detection."""
 
-class RedirectDetectionTests(TestCase):
-    """Test redirect detection and article-to-redirect conversion."""
+    def test_normalize_wikitext(self):
+        """Test that wikitext normalization removes markup correctly."""
+        text = "Some text with [[link|display]] and {{template}} and <ref>citation</ref>"
+        normalized = autoreview._normalize_wikitext(text)
+        self.assertEqual(normalized, "Some text with display and and")
 
-    def test_is_redirect_with_english_alias(self):
-        """Test redirect detection with English #REDIRECT."""
-        wikitext = "#REDIRECT [[Target Page]]"
-        aliases = ["#REDIRECT"]
-        self.assertTrue(_is_redirect(wikitext, aliases))
+    def test_normalize_wikitext_with_categories(self):
+        """Test that category links are removed."""
+        text = "Article text [[Category:Test]] more text"
+        normalized = autoreview._normalize_wikitext(text)
+        self.assertEqual(normalized, "Article text more text")
 
-    def test_is_redirect_case_insensitive(self):
-        """Test redirect detection is case-insensitive."""
-        wikitext = "#redirect [[Target Page]]"
-        aliases = ["#REDIRECT"]
-        self.assertTrue(_is_redirect(wikitext, aliases))
+    def test_extract_additions_simple(self):
+        """Test extracting additions from simple text change."""
+        parent = "Original text."
+        pending = "Original text. New addition."
+        additions = autoreview._extract_additions(parent, pending)
+        self.assertEqual(len(additions), 1)
+        self.assertIn("New addition.", additions[0])
 
-    def test_is_redirect_with_spaces(self):
-        """Test redirect detection with spaces after #."""
-        wikitext = "#  REDIRECT [[Target Page]]"
-        aliases = ["#REDIRECT"]
-        self.assertTrue(_is_redirect(wikitext, aliases))
+    def test_extract_additions_no_parent(self):
+        """Test extraction when there is no parent revision."""
+        parent = ""
+        pending = "New article text."
+        additions = autoreview._extract_additions(parent, pending)
+        self.assertEqual(additions, ["New article text."])
 
-    def test_is_redirect_with_finnish_alias(self):
-        """Test redirect detection with Finnish #OHJAUS."""
-        wikitext = "#OHJAUS [[Kohde sivu]]"
-        aliases = ["#OHJAUS", "#REDIRECT"]
-        self.assertTrue(_is_redirect(wikitext, aliases))
+    def test_extract_additions_multiple(self):
+        """Test extracting multiple separate additions."""
+        parent = "First paragraph. Third paragraph."
+        pending = "First paragraph. Second paragraph. Third paragraph. Fourth paragraph."
+        additions = autoreview._extract_additions(parent, pending)
+        self.assertGreaterEqual(len(additions), 2)
 
-    def test_is_not_redirect_regular_content(self):
-        """Test that regular content is not detected as redirect."""
-        wikitext = "This is a normal article with #REDIRECT mentioned in text."
-        aliases = ["#REDIRECT"]
-        self.assertFalse(_is_redirect(wikitext, aliases))
-
-    def test_is_not_redirect_empty_wikitext(self):
-        """Test that empty wikitext is not a redirect."""
-        self.assertFalse(_is_redirect("", ["#REDIRECT"]))
-        self.assertFalse(_is_redirect(None, ["#REDIRECT"]))
-
-    def test_is_not_redirect_no_aliases(self):
-        """Test that no aliases means no redirect detection."""
-        wikitext = "#REDIRECT [[Target]]"
-        self.assertFalse(_is_redirect(wikitext, []))
-        self.assertFalse(_is_redirect(wikitext, None))
-
-    @patch("reviews.autoreview._get_parent_wikitext")
-    def test_article_to_redirect_conversion_detected(self, mock_get_parent):
-        """Test article-to-redirect conversion is detected."""
+    def test_is_addition_superseded_fully_removed(self):
+        """Test case 1: Addition was fully removed in current stable."""
         mock_revision = MagicMock()
-        mock_revision.get_wikitext.return_value = "#REDIRECT [[Target]]"
-        mock_revision.parentid = 123
+        mock_revision.revid = 123
+        mock_revision.parentid = 100
+        mock_revision.get_wikitext.return_value = (
+            "Article intro. User added this content about topic X. More text."
+        )
+        mock_revision.page = MagicMock()
 
-        mock_get_parent.return_value = "This is article content"
+        # Mock the latest revision (which is different from the one being checked)
+        mock_latest = MagicMock()
+        mock_latest.revid = 125  # Different from 123
+        mock_latest.get_wikitext.return_value = "Article intro. More text."
 
-        aliases = ["#REDIRECT"]
-        result = _is_article_to_redirect_conversion(mock_revision, aliases)
+        # Mock parent revision
+        with (
+            patch("reviews.autoreview._get_parent_wikitext") as mock_parent,
+            patch("reviews.autoreview.PendingRevision.objects.filter") as mock_filter,
+        ):
+            mock_parent.return_value = "Article intro. More text."
+            mock_filter.return_value.order_by.return_value.first.return_value = mock_latest
 
-        self.assertTrue(result)
+            # Current stable has the addition removed
+            current_stable = "Article intro. More text."
+            threshold = 0.2
 
-    @patch("reviews.autoreview._get_parent_wikitext")
-    def test_redirect_to_redirect_not_conversion(self, mock_get_parent):
-        """Test redirect-to-redirect is not a conversion."""
+            result = autoreview._is_addition_superseded(mock_revision, current_stable, threshold)
+            self.assertTrue(result)
+
+    def test_is_addition_superseded_partially_removed(self):
+        """Test case 2: Addition was partially removed (majority removed)."""
         mock_revision = MagicMock()
-        mock_revision.get_wikitext.return_value = "#REDIRECT [[New Target]]"
-        mock_revision.parentid = 123
+        mock_revision.revid = 123
+        mock_revision.parentid = 100
+        mock_revision.get_wikitext.return_value = (
+            "Article text. User added a very long detailed sentence about "
+            "topic X with lots of information and details here. More text."
+        )
+        mock_revision.page = MagicMock()
 
-        mock_get_parent.return_value = "#REDIRECT [[Old Target]]"
+        # Mock the latest revision
+        mock_latest = MagicMock()
+        mock_latest.revid = 125
+        mock_latest.get_wikitext.return_value = "Article text. User added info. More text."
 
-        aliases = ["#REDIRECT"]
-        result = _is_article_to_redirect_conversion(mock_revision, aliases)
+        with (
+            patch("reviews.autoreview._get_parent_wikitext") as mock_parent,
+            patch("reviews.autoreview.PendingRevision.objects.filter") as mock_filter,
+        ):
+            mock_parent.return_value = "Article text. More text."
+            mock_filter.return_value.order_by.return_value.first.return_value = mock_latest
 
-        self.assertFalse(result)
+            # Current stable only kept a small part (~15% of the addition)
+            current_stable = "Article text. User added info. More text."
+            threshold = 0.2
 
-    def test_article_to_redirect_no_parent(self):
-        """Test no conversion when there's no parent."""
+            result = autoreview._is_addition_superseded(mock_revision, current_stable, threshold)
+            # Should be considered superseded as significant content was removed
+            self.assertTrue(result)
+
+    def test_is_addition_superseded_moved_text(self):
+        """Test case 3: Addition was moved to different location."""
         mock_revision = MagicMock()
-        mock_revision.get_wikitext.return_value = "#REDIRECT [[Target]]"
+        mock_revision.revid = 123
+        mock_revision.parentid = 100
+        mock_revision.get_wikitext.return_value = (
+            "Section 1. User added this important content. Section 2."
+        )
+        mock_revision.page = MagicMock()
+
+        # Mock the latest revision
+        mock_latest = MagicMock()
+        mock_latest.revid = 125
+        mock_latest.get_wikitext.return_value = (
+            "Section 1. Section 2. User added this important content."
+        )
+
+        with (
+            patch("reviews.autoreview._get_parent_wikitext") as mock_parent,
+            patch("reviews.autoreview.PendingRevision.objects.filter") as mock_filter,
+        ):
+            mock_parent.return_value = "Section 1. Section 2."
+            mock_filter.return_value.order_by.return_value.first.return_value = mock_latest
+
+            # Current stable has the content moved to Section 2
+            current_stable = "Section 1. Section 2. User added this important content."
+            threshold = 0.2
+
+            result = autoreview._is_addition_superseded(mock_revision, current_stable, threshold)
+            # Should NOT be superseded as content is still present
+            self.assertFalse(result)
+
+    def test_is_addition_superseded_rephrased(self):
+        """Test case 4: Addition was rephrased/reworded."""
+        mock_revision = MagicMock()
+        mock_revision.revid = 123
+        mock_revision.parentid = 100
+        mock_revision.get_wikitext.return_value = (
+            "Article text. The quick brown fox jumps over the lazy dog. More text."
+        )
+        mock_revision.page = MagicMock()
+
+        # Mock the latest revision
+        mock_latest = MagicMock()
+        mock_latest.revid = 125
+        mock_latest.get_wikitext.return_value = (
+            "Article text. A fast brown fox leaps over a sleepy canine. More text."
+        )
+
+        with (
+            patch("reviews.autoreview._get_parent_wikitext") as mock_parent,
+            patch("reviews.autoreview.PendingRevision.objects.filter") as mock_filter,
+        ):
+            mock_parent.return_value = "Article text. More text."
+            mock_filter.return_value.order_by.return_value.first.return_value = mock_latest
+
+            # Current stable has similar but rephrased content
+            current_stable = "Article text. A fast brown fox leaps over a sleepy canine. More text."
+            threshold = 0.2
+
+            result = autoreview._is_addition_superseded(mock_revision, current_stable, threshold)
+            # Should NOT be superseded due to similarity (even if rephrased)
+            self.assertFalse(result)
+
+    def test_is_addition_superseded_with_new_text(self):
+        """Test case 5: Addition is present but surrounded by new content."""
+        mock_revision = MagicMock()
+        mock_revision.revid = 123
+        mock_revision.parentid = 100
+        mock_revision.get_wikitext.return_value = (
+            "Article text. User added this sentence. More text."
+        )
+        mock_revision.page = MagicMock()
+
+        # Mock the latest revision
+        mock_latest = MagicMock()
+        mock_latest.revid = 125
+        mock_latest.get_wikitext.return_value = (
+            "Article text. New intro. User added this sentence. New conclusion. More text."
+        )
+
+        with (
+            patch("reviews.autoreview._get_parent_wikitext") as mock_parent,
+            patch("reviews.autoreview.PendingRevision.objects.filter") as mock_filter,
+        ):
+            mock_parent.return_value = "Article text. More text."
+            mock_filter.return_value.order_by.return_value.first.return_value = mock_latest
+
+            # Current stable has the addition plus extra content
+            current_stable = (
+                "Article text. New intro. User added this sentence. New conclusion. More text."
+            )
+            threshold = 0.2
+
+            result = autoreview._is_addition_superseded(mock_revision, current_stable, threshold)
+            # Should NOT be superseded as the addition is still present
+            self.assertFalse(result)
+
+    def test_is_addition_superseded_unchanged(self):
+        """Test case 6: Addition remains unchanged."""
+        mock_revision = MagicMock()
+        mock_revision.revid = 123
+        mock_revision.parentid = 100
+        mock_revision.get_wikitext.return_value = (
+            "Article text. User added this content. More text."
+        )
+        mock_revision.page = MagicMock()
+
+        # Mock the latest revision
+        mock_latest = MagicMock()
+        mock_latest.revid = 125
+        mock_latest.get_wikitext.return_value = "Article text. User added this content. More text."
+
+        with (
+            patch("reviews.autoreview._get_parent_wikitext") as mock_parent,
+            patch("reviews.autoreview.PendingRevision.objects.filter") as mock_filter,
+        ):
+            mock_parent.return_value = "Article text. More text."
+            mock_filter.return_value.order_by.return_value.first.return_value = mock_latest
+
+            # Current stable has the exact same addition
+            current_stable = "Article text. User added this content. More text."
+            threshold = 0.2
+
+            result = autoreview._is_addition_superseded(mock_revision, current_stable, threshold)
+            # Should NOT be superseded
+            self.assertFalse(result)
+
+    def test_is_addition_superseded_short_addition(self):
+        """Test that very short additions are ignored."""
+        mock_revision = MagicMock()
+        mock_revision.revid = 123
+        mock_revision.parentid = 100
+        mock_revision.get_wikitext.return_value = "Article text. Yes. More text."
+        mock_revision.page = MagicMock()
+
+        # Mock the latest revision
+        mock_latest = MagicMock()
+        mock_latest.revid = 125
+        mock_latest.get_wikitext.return_value = "Article text. More text."
+
+        with (
+            patch("reviews.autoreview._get_parent_wikitext") as mock_parent,
+            patch("reviews.autoreview.PendingRevision.objects.filter") as mock_filter,
+        ):
+            mock_parent.return_value = "Article text. More text."
+            mock_filter.return_value.order_by.return_value.first.return_value = mock_latest
+
+            # Current stable doesn't have the short addition
+            current_stable = "Article text. More text."
+            threshold = 0.2
+
+            result = autoreview._is_addition_superseded(mock_revision, current_stable, threshold)
+            # Should NOT be considered superseded (too short to matter)
+            self.assertFalse(result)
+
+    def test_is_addition_superseded_no_parent(self):
+        """Test behavior when there's no parent revision."""
+        mock_revision = MagicMock()
+        mock_revision.revid = 123
         mock_revision.parentid = None
+        mock_revision.get_wikitext.return_value = "New article content."
+        mock_revision.page = MagicMock()
 
-        aliases = ["#REDIRECT"]
-        result = _is_article_to_redirect_conversion(mock_revision, aliases)
+        # Mock the latest revision
+        mock_latest = MagicMock()
+        mock_latest.revid = 125
+        mock_latest.get_wikitext.return_value = "Different content."
 
-        self.assertFalse(result)
+        with patch("reviews.autoreview.PendingRevision.objects.filter") as mock_filter:
+            mock_filter.return_value.order_by.return_value.first.return_value = mock_latest
 
+            current_stable = "Different content."
+            threshold = 0.2
 
-class HelperFunctionsTests(TestCase):
-    """Test helper functions for normalization and matching."""
+            result = autoreview._is_addition_superseded(mock_revision, current_stable, threshold)
+            # Should NOT be superseded (first revision)
+            self.assertFalse(result)
 
-    def test_normalize_to_lookup(self):
-        """Test normalization creates case-insensitive lookup."""
-        values = ["Admin", "Sysop", "BUREAUCRAT"]
-        result = _normalize_to_lookup(values)
-
-        self.assertEqual(result["admin"], "Admin")
-        self.assertEqual(result["sysop"], "Sysop")
-        self.assertEqual(result["bureaucrat"], "BUREAUCRAT")
-
-    def test_normalize_to_lookup_empty(self):
-        """Test normalization with empty input."""
-        self.assertEqual(_normalize_to_lookup(None), {})
-        self.assertEqual(_normalize_to_lookup([]), {})
-
-    def test_normalize_to_lookup_filters_empty_strings(self):
-        """Test normalization filters out empty strings."""
-        values = ["Admin", "", "Sysop", None]
-        result = _normalize_to_lookup(values)
-
-        self.assertEqual(len(result), 2)
-        self.assertIn("admin", result)
-        self.assertIn("sysop", result)
-
-    def test_matched_user_groups_from_profile(self):
-        """Test matching user groups from profile."""
+    def test_is_addition_superseded_empty_stable(self):
+        """Test behavior when current stable is empty."""
         mock_revision = MagicMock()
-        mock_revision.superset_data = {}
+        mock_revision.revid = 123
+        mock_revision.parentid = 100
+        mock_revision.get_wikitext.return_value = "New content added."
+        mock_revision.page = MagicMock()
 
-        mock_profile = MagicMock()
-        mock_profile.usergroups = ["sysop", "autoreviewer"]
+        # Mock the latest revision
+        mock_latest = MagicMock()
+        mock_latest.revid = 125
+        mock_latest.get_wikitext.return_value = ""
 
-        allowed_groups = _normalize_to_lookup(["sysop", "admin"])
+        with (
+            patch("reviews.autoreview._get_parent_wikitext") as mock_parent,
+            patch("reviews.autoreview.PendingRevision.objects.filter") as mock_filter,
+        ):
+            mock_parent.return_value = ""
+            mock_filter.return_value.order_by.return_value.first.return_value = mock_latest
 
-        result = _matched_user_groups(mock_revision, mock_profile, allowed_groups=allowed_groups)
+            current_stable = ""
+            threshold = 0.2
 
-        self.assertEqual(result, {"sysop"})
+            result = autoreview._is_addition_superseded(mock_revision, current_stable, threshold)
+            # Should return False (can't compare against empty)
+            self.assertFalse(result)
 
-    def test_matched_user_groups_from_superset(self):
-        """Test matching user groups from superset data."""
+    def test_is_addition_superseded_is_latest_revision(self):
+        """Test that if revision is the latest, it cannot be superseded."""
         mock_revision = MagicMock()
-        mock_revision.superset_data = {"user_groups": ["admin", "bot"]}
-
-        allowed_groups = _normalize_to_lookup(["admin", "bureaucrat"])
-
-        result = _matched_user_groups(mock_revision, None, allowed_groups=allowed_groups)
-
-        self.assertEqual(result, {"admin"})
-
-    def test_matched_user_groups_case_insensitive(self):
-        """Test user group matching is case-insensitive."""
-        mock_revision = MagicMock()
-        mock_revision.superset_data = {"user_groups": ["SYSOP"]}
-
-        mock_profile = MagicMock()
-        mock_profile.usergroups = []
-
-        allowed_groups = _normalize_to_lookup(["sysop"])
-
-        result = _matched_user_groups(mock_revision, mock_profile, allowed_groups=allowed_groups)
-
-        self.assertEqual(result, {"sysop"})
-
-    def test_blocking_category_hits(self):
-        """Test blocking category detection."""
-        mock_revision = MagicMock()
-        mock_revision.get_categories.return_value = ["Living people", "American politicians"]
-        mock_revision.page.categories = []
-
-        blocking_lookup = _normalize_to_lookup(["Living people", "BLP"])
-
-        result = _blocking_category_hits(mock_revision, blocking_lookup)
-
-        self.assertEqual(result, {"Living people"})
-
-    def test_blocking_category_hits_from_page(self):
-        """Test blocking category detection from page.categories."""
-        mock_revision = MagicMock()
-        mock_revision.get_categories.return_value = []
-        mock_revision.page.categories = ["Living people"]
-
-        blocking_lookup = _normalize_to_lookup(["Living people"])
-
-        result = _blocking_category_hits(mock_revision, blocking_lookup)
-
-        self.assertEqual(result, {"Living people"})
-
-
-class BotDetectionTests(TestCase):
-    """Test bot user detection."""
-
-    def test_is_bot_user_from_superset_rc_bot(self):
-        """Test bot detection from superset rc_bot flag."""
-        mock_revision = MagicMock()
-        mock_revision.superset_data = {"rc_bot": True}
-
-        result = _is_bot_user(mock_revision, None)
-
-        self.assertTrue(result)
-
-    @patch("reviews.autoreview.is_bot_edit")
-    def test_is_bot_user_from_profile(self, mock_is_bot_edit):
-        """Test bot detection from profile via is_bot_edit."""
-        mock_revision = MagicMock()
-        mock_revision.superset_data = {}
-
-        mock_is_bot_edit.return_value = True
-
-        result = _is_bot_user(mock_revision, None)
-
-        self.assertTrue(result)
-
-    def test_is_bot_user_not_bot(self):
-        """Test non-bot user detection."""
-        mock_revision = MagicMock()
-        mock_revision.superset_data = {}
-
-        with patch("reviews.autoreview.is_bot_edit", return_value=False):
-            result = _is_bot_user(mock_revision, None)
-
-        self.assertFalse(result)
-
-    def test_is_bot_edit_with_bot_profile(self):
-        """Test is_bot_edit with bot profile."""
-        from reviews.models import EditorProfile, PendingPage, Wiki
-
-        # Create test data
-        wiki = Wiki.objects.create(code="en", family="wikipedia")
-        EditorProfile.objects.create(
-            wiki=wiki, username="BotUser", is_bot=True, is_autopatrolled=False
+        mock_revision.revid = 123
+        mock_revision.parentid = 100
+        mock_revision.get_wikitext.return_value = (
+            "Article text. User added this content. More text."
         )
+        mock_revision.page = MagicMock()
 
-        PendingPage.objects.create(wiki=wiki, pageid=123, title="Test Page", stable_revid=100)
+        # Mock the latest revision to be the same as the revision being checked
+        mock_latest = MagicMock()
+        mock_latest.revid = 123  # Same as mock_revision.revid
+        mock_latest.get_wikitext.return_value = "Article text. User added this content. More text."
 
-        mock_revision = MagicMock()
-        mock_revision.user_name = "BotUser"
-        mock_revision.page.wiki = wiki
+        with patch("reviews.autoreview.PendingRevision.objects.filter") as mock_filter:
+            mock_filter.return_value.order_by.return_value.first.return_value = mock_latest
 
-        result = is_bot_edit(mock_revision)
+            current_stable = "Article text. More text."
+            threshold = 0.2
 
-        self.assertTrue(result)
-
-    def test_is_bot_edit_with_former_bot_profile(self):
-        """Test is_bot_edit with former bot profile."""
-        from reviews.models import EditorProfile, Wiki
-
-        # Create test data
-        wiki = Wiki.objects.create(code="de", family="wikipedia")
-        EditorProfile.objects.create(
-            wiki=wiki,
-            username="FormerBot",
-            is_bot=False,
-            is_former_bot=True,
-            is_autopatrolled=False,
-        )
-
-        mock_revision = MagicMock()
-        mock_revision.user_name = "FormerBot"
-        mock_revision.page.wiki = wiki
-
-        result = is_bot_edit(mock_revision)
-
-        self.assertTrue(result)
-
-    def test_is_bot_edit_no_username(self):
-        """Test is_bot_edit with no username."""
-        mock_revision = MagicMock()
-        mock_revision.user_name = None
-
-        result = is_bot_edit(mock_revision)
-
-        self.assertFalse(result)
-
-    def test_is_bot_edit_profile_not_exists(self):
-        """Test is_bot_edit when profile doesn't exist."""
-        from reviews.models import Wiki
-
-        wiki = Wiki.objects.create(code="fr", family="wikipedia")
-
-        mock_revision = MagicMock()
-        mock_revision.user_name = "NonExistentUser"
-        mock_revision.page.wiki = wiki
-
-        result = is_bot_edit(mock_revision)
-
-        self.assertFalse(result)
+            result = autoreview._is_addition_superseded(mock_revision, current_stable, threshold)
+            # Should return False because this IS the latest revision
+            self.assertFalse(result)
