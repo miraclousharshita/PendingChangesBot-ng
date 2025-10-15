@@ -58,6 +58,7 @@ class WikiConfiguration(models.Model):
         help_text=(
             "ORES damaging model threshold (0.0-1.0). "
             "Edits with damaging probability above this will not be auto-approved. "
+            "Set to 0.0 to use the global default from settings."
         ),
     )
     ores_goodfaith_threshold = models.FloatField(
@@ -68,6 +69,29 @@ class WikiConfiguration(models.Model):
         help_text=(
             "ORES goodfaith model threshold (0.0-1.0). "
             "Edits with goodfaith probability below this will not be auto-approved. "
+            "Set to 0.0 to use the global default from settings."
+        ),
+    )
+    ores_damaging_threshold_living = models.FloatField(
+        null=True,
+        blank=True,
+        default=0.0,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text=(
+            "ORES damaging threshold for living person biographies (stricter). "
+            "Set to 0.0 to use the global default from settings. "
+            "Living people are detected via categories and Wikidata."
+        ),
+    )
+    ores_goodfaith_threshold_living = models.FloatField(
+        null=True,
+        blank=True,
+        default=0.0,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text=(
+            "ORES goodfaith threshold for living person biographies (stricter). "
+            "Set to 0.0 to use the global default from settings. "
+            "Living people are detected via categories and Wikidata."
         ),
     )
     updated_at = models.DateTimeField(auto_now=True)

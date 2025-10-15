@@ -12,6 +12,7 @@ import pywikibot
 from bs4 import BeautifulSoup
 from django.conf import settings
 from pywikibot.comms import http
+from reviewer.utils.is_living_person import is_living_person
 
 from .models import EditorProfile, PendingPage, PendingRevision, Wiki
 from .services import WikiClient
@@ -83,7 +84,7 @@ def _evaluate_revision(
 ) -> dict:
     tests: list[dict] = []
 
-    # Test 1: Check if revision has been manually un-approved by a human reviewer
+    # Test 1: Manual un-approval check
     is_manually_unapproved = client.has_manual_unapproval(revision.page.title, revision.revid)
     if is_manually_unapproved:
         tests.append(
@@ -115,7 +116,7 @@ def _evaluate_revision(
             }
         )
 
-    # Test 2: Bot editors can always be auto-approved.
+    # Test 2: Bot user check
     if _is_bot_user(revision, profile):
         tests.append(
             {
@@ -143,7 +144,7 @@ def _evaluate_revision(
             }
         )
 
-    # Test 3: Check if user was blocked after making the edit
+    # Test 3: User block status
     try:
         if client.is_user_blocked_after_edit(revision.user_name, revision.timestamp):
             tests.append(
@@ -190,7 +191,7 @@ def _evaluate_revision(
             ),
         }
 
-    # Test 4: Autoapproved editors can always be auto-approved.
+    # Test 4: Auto-approved groups
     if auto_groups:
         matched_groups = _matched_user_groups(revision, profile, allowed_groups=auto_groups)
         if matched_groups:
@@ -253,9 +254,8 @@ def _evaluate_revision(
                 }
             )
 
-    # Test 5: Do not approve article to redirect conversions
+    # Test 5: Article-to-redirect conversion
     is_redirect_conversion = _is_article_to_redirect_conversion(revision, redirect_aliases)
-
     if is_redirect_conversion:
         tests.append(
             {
@@ -283,7 +283,7 @@ def _evaluate_revision(
             }
         )
 
-    # Check if user has autopatrolled rights (after redirect conversion check)
+    # Autopatrolled users approved after redirect check
     if profile and profile.is_autopatrolled:
         return {
             "tests": tests,
@@ -294,7 +294,7 @@ def _evaluate_revision(
             ),
         }
 
-    # Test 6: Blocking categories on the old version prevent automatic approval.
+    # Test 6: Blocking categories
     blocking_hits = _blocking_category_hits(revision, blocking_categories)
     if blocking_hits:
         tests.append(
@@ -325,7 +325,7 @@ def _evaluate_revision(
         }
     )
 
-    # Test 7: Check for new rendering errors in the HTML.
+    # Test 7: New render errors
     new_render_errors = _check_for_new_render_errors(revision, client)
     if new_render_errors:
         tests.append(
@@ -354,7 +354,7 @@ def _evaluate_revision(
         }
     )
 
-    # Test 8: Invalid ISBN checksums prevent automatic approval.
+    # Test 8: Invalid ISBN checksums
     wikitext = revision.get_wikitext()
     invalid_isbns = _find_invalid_isbns(wikitext)
     if invalid_isbns:
@@ -386,18 +386,9 @@ def _evaluate_revision(
         }
     )
 
-    # Test 9: Check ORES edit quality scores
-    configuration = revision.page.wiki.configuration
-    damaging_threshold = configuration.ores_damaging_threshold
-    if damaging_threshold == 0.0:
-        damaging_threshold = settings.ORES_DAMAGING_THRESHOLD
-
-    goodfaith_threshold = configuration.ores_goodfaith_threshold
-    if goodfaith_threshold == 0.0:
-        goodfaith_threshold = settings.ORES_GOODFAITH_THRESHOLD
-
-    if damaging_threshold > 0 or goodfaith_threshold > 0:
-        ores_result = _check_ores_scores(revision, damaging_threshold, goodfaith_threshold)
+    # Test 9: ORES edit quality scores
+    ores_result = _evaluate_ores_thresholds(revision)
+    if ores_result:
         tests.append(ores_result["test"])
 
         if ores_result["should_block"]:
@@ -418,6 +409,38 @@ def _evaluate_revision(
             reason="In dry-run mode the edit would not be approved automatically.",
         ),
     }
+
+
+def _evaluate_ores_thresholds(revision: PendingRevision) -> dict | None:
+    """Evaluate ORES thresholds with living person adjustments."""
+    configuration = revision.page.wiki.configuration
+
+    # Base thresholds - fallback to settings if 0
+    damaging_threshold = configuration.ores_damaging_threshold
+    if damaging_threshold == 0.0:
+        damaging_threshold = settings.ORES_DAMAGING_THRESHOLD
+
+    goodfaith_threshold = configuration.ores_goodfaith_threshold
+    if goodfaith_threshold == 0.0:
+        goodfaith_threshold = settings.ORES_GOODFAITH_THRESHOLD
+
+    # Apply stricter thresholds for living person biographies
+    if _is_living_person_article(revision):
+        living_damaging = configuration.ores_damaging_threshold_living
+        if living_damaging == 0.0:
+            living_damaging = settings.ORES_DAMAGING_THRESHOLD_LIVING
+
+        living_goodfaith = configuration.ores_goodfaith_threshold_living
+        if living_goodfaith == 0.0:
+            living_goodfaith = settings.ORES_GOODFAITH_THRESHOLD_LIVING
+
+        damaging_threshold = living_damaging
+        goodfaith_threshold = living_goodfaith
+
+    if damaging_threshold == 0 and goodfaith_threshold == 0:
+        return None
+
+    return _check_ores_scores(revision, damaging_threshold, goodfaith_threshold)
 
 
 def _get_render_error_count(revision: PendingRevision, html: str) -> int:
@@ -725,6 +748,21 @@ def _find_invalid_isbns(text: str) -> list[str]:
     return invalid_isbns
 
 
+def _is_living_person_article(revision: PendingRevision) -> bool:
+    """Check if article is about a living person via categories and Wikidata."""
+    wiki_code = revision.page.wiki.code
+    article_title = revision.page.title
+
+    try:
+        return is_living_person(wiki_code, article_title)
+    except Exception as e:
+        logger.warning(
+            f"Error checking if {article_title} is living person: {e}. "
+            "Falling back to assuming not a living person for safety."
+        )
+        return False
+
+
 def _check_ores_scores(
     revision: PendingRevision,
     damaging_threshold: float,
@@ -741,6 +779,17 @@ def _check_ores_scores(
         models_to_check.append("damaging")
     if goodfaith_threshold > 0:
         models_to_check.append("goodfaith")
+
+    if not models_to_check:
+        return {
+            "should_block": False,
+            "test": {
+                "id": "ores-scores",
+                "title": "ORES edit quality scores",
+                "status": "skip",
+                "message": "ORES checks are disabled (thresholds set to 0).",
+            },
+        }
 
     models_param = "|".join(models_to_check)
     url = f"{base_url}/{ores_wiki}/{revision.revid}?models={models_param}"
