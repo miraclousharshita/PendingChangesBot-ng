@@ -15,7 +15,7 @@ from django.conf import settings
 from pywikibot.comms import http
 from reviewer.utils.is_living_person import is_living_person
 
-from .models import EditorProfile, PendingPage, PendingRevision, Wiki
+from .models import EditorProfile, ModelScores, PendingPage, PendingRevision, Wiki
 from .services import WikiClient
 
 logger = logging.getLogger(__name__)
@@ -843,13 +843,11 @@ def _check_ores_scores(
     goodfaith_threshold: float,
 ) -> dict:
     """Check ORES damaging and goodfaith scores for a revision."""
-    models_to_check = []
-    if damaging_threshold > 0:
-        models_to_check.append("damaging")
-    if goodfaith_threshold > 0:
-        models_to_check.append("goodfaith")
+    # Determine which models need to be checked
+    check_damaging = damaging_threshold > 0
+    check_goodfaith = goodfaith_threshold > 0
 
-    if not models_to_check:
+    if not check_damaging and not check_goodfaith:
         return {
             "should_block": False,
             "test": {
@@ -860,10 +858,39 @@ def _check_ores_scores(
             },
         }
 
+    # Try to get cached scores first
+    try:
+        model_scores = ModelScores.objects.get(revision=revision)
+        damaging_prob = model_scores.ores_damaging_score
+        goodfaith_prob = model_scores.ores_goodfaith_score
+    except ModelScores.DoesNotExist:
+        # No cached scores, fetch from API
+        damaging_prob, goodfaith_prob = _fetch_ores_scores_from_api(
+            revision, check_damaging, check_goodfaith
+        )
+
+    # Evaluate thresholds and return result
+    return _evaluate_ores_thresholds_result(
+        damaging_prob, goodfaith_prob, damaging_threshold, goodfaith_threshold
+    )
+
+
+def _fetch_ores_scores_from_api(
+    revision: PendingRevision, check_damaging: bool, check_goodfaith: bool
+) -> tuple[float | None, float | None]:
+    """Fetch ORES scores from API and cache them."""
     wiki_code = revision.page.wiki.code
     wiki_family = revision.page.wiki.family
     ores_wiki = f"{wiki_code}{wiki_family[0:4]}"
+
+    # Build models parameter
+    models_to_check = []
+    if check_damaging:
+        models_to_check.append("damaging")
+    if check_goodfaith:
+        models_to_check.append("goodfaith")
     models_param = "|".join(models_to_check)
+
     url = f"https://ores.wikimedia.org/v3/scores/{ores_wiki}/{revision.revid}?models={models_param}"
 
     try:
@@ -871,64 +898,42 @@ def _check_ores_scores(
         data = json.loads(response.text)
         scores = data.get(ores_wiki, {}).get("scores", {}).get(str(revision.revid), {})
 
-        # Check damaging score
-        if damaging_threshold > 0:
-            damaging_prob = (
-                scores.get("damaging", {}).get("score", {}).get("probability", {}).get("true", 0.0)
-            )
-            if damaging_prob > damaging_threshold:
-                return {
-                    "should_block": True,
-                    "test": {
-                        "id": "ores-scores",
-                        "title": "ORES edit quality scores",
-                        "status": "fail",
-                        "message": f"ORES damaging score ({damaging_prob:.3f}) exceeds threshold ({damaging_threshold:.3f}).",  # noqa: E501
-                    },
-                }
+        # Extract scores from API response (only if threshold > 0)
+        damaging_prob = (
+            scores.get("damaging", {}).get("score", {}).get("probability", {}).get("true", 0.0)
+            if check_damaging
+            else None
+        )
+        goodfaith_prob = (
+            scores.get("goodfaith", {}).get("score", {}).get("probability", {}).get("true", 1.0)
+            if check_goodfaith
+            else None
+        )
 
-        # Check goodfaith score
-        if goodfaith_threshold > 0:
-            goodfaith_prob = (
-                scores.get("goodfaith", {}).get("score", {}).get("probability", {}).get("true", 1.0)
-            )
-            if goodfaith_prob < goodfaith_threshold:
-                return {
-                    "should_block": True,
-                    "test": {
-                        "id": "ores-scores",
-                        "title": "ORES edit quality scores",
-                        "status": "fail",
-                        "message": f"ORES goodfaith score ({goodfaith_prob:.3f}) "
-                        f"is below threshold ({goodfaith_threshold:.3f}).",
-                    },
-                }
+        # Cache the scores
+        ModelScores.objects.create(
+            revision=revision,
+            ores_damaging_score=damaging_prob,
+            ores_goodfaith_score=goodfaith_prob,
+        )
 
-        # Build success message
-        messages = []
-        if damaging_threshold > 0:
-            damaging_prob = (
-                scores.get("damaging", {}).get("score", {}).get("probability", {}).get("true", 0.0)
-            )
-            messages.append(f"damaging: {damaging_prob:.3f}")
-        if goodfaith_threshold > 0:
-            goodfaith_prob = (
-                scores.get("goodfaith", {}).get("score", {}).get("probability", {}).get("true", 1.0)
-            )
-            messages.append(f"goodfaith: {goodfaith_prob:.3f}")
-
-        return {
-            "should_block": False,
-            "test": {
-                "id": "ores-scores",
-                "title": "ORES edit quality scores",
-                "status": "ok",
-                "message": f"ORES scores are within acceptable thresholds ({', '.join(messages)}).",
-            },
-        }
+        return damaging_prob, goodfaith_prob
 
     except Exception as e:
-        logger.error(f"Error checking ORES scores for revision {revision.revid}: {e}")
+        logger.error(f"Error fetching ORES scores for revision {revision.revid}: {e}")
+        # Return None to indicate error - will be handled by caller
+        return None, None
+
+
+def _evaluate_ores_thresholds_result(
+    damaging_prob: float | None,
+    goodfaith_prob: float | None,
+    damaging_threshold: float,
+    goodfaith_threshold: float,
+) -> dict:
+    """Evaluate ORES scores against thresholds and return test result."""
+    # Handle error case (API failure)
+    if damaging_prob is None and goodfaith_prob is None:
         return {
             "should_block": True,
             "test": {
@@ -938,3 +943,46 @@ def _check_ores_scores(
                 "message": "Could not verify ORES edit quality scores.",
             },
         }
+
+    # Check damaging threshold
+    if damaging_threshold > 0 and damaging_prob is not None:
+        if damaging_prob > damaging_threshold:
+            return {
+                "should_block": True,
+                "test": {
+                    "id": "ores-scores",
+                    "title": "ORES edit quality scores",
+                    "status": "fail",
+                    "message": f"ORES damaging score ({damaging_prob:.3f}) exceeds threshold ({damaging_threshold:.3f}).",  # noqa: E501
+                },
+            }
+
+    # Check goodfaith threshold
+    if goodfaith_threshold > 0 and goodfaith_prob is not None:
+        if goodfaith_prob < goodfaith_threshold:
+            return {
+                "should_block": True,
+                "test": {
+                    "id": "ores-scores",
+                    "title": "ORES edit quality scores",
+                    "status": "fail",
+                    "message": f"ORES goodfaith score ({goodfaith_prob:.3f}) is below threshold ({goodfaith_threshold:.3f}).",  # noqa: E501
+                },
+            }
+
+    # Build success message
+    messages = []
+    if damaging_threshold > 0 and damaging_prob is not None:
+        messages.append(f"damaging: {damaging_prob:.3f}")
+    if goodfaith_threshold > 0 and goodfaith_prob is not None:
+        messages.append(f"goodfaith: {goodfaith_prob:.3f}")
+
+    return {
+        "should_block": False,
+        "test": {
+            "id": "ores-scores",
+            "title": "ORES edit quality scores",
+            "status": "ok",
+            "message": f"ORES scores are within acceptable thresholds ({', '.join(messages)}).",
+        },
+    }

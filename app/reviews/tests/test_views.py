@@ -213,6 +213,86 @@ class ViewTests(TestCase):
         self.assertEqual(config.blocking_categories, ["Foo"])
         self.assertEqual(config.auto_approved_groups, ["sysop"])
 
+    def test_api_configuration_updates_ores_thresholds(self):
+        url = reverse("api_configuration", args=[self.wiki.pk])
+        payload = {
+            "blocking_categories": [],
+            "auto_approved_groups": [],
+            "ores_damaging_threshold": 0.8,
+            "ores_goodfaith_threshold": 0.6,
+            "ores_damaging_threshold_living": 0.5,
+            "ores_goodfaith_threshold_living": 0.75,
+        }
+        response = self.client.put(url, data=json.dumps(payload), content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+
+        data = response.json()
+        self.assertEqual(data["ores_damaging_threshold"], 0.8)
+        self.assertEqual(data["ores_goodfaith_threshold"], 0.6)
+        self.assertEqual(data["ores_damaging_threshold_living"], 0.5)
+        self.assertEqual(data["ores_goodfaith_threshold_living"], 0.75)
+
+        config = self.wiki.configuration
+        config.refresh_from_db()
+        self.assertEqual(config.ores_damaging_threshold, 0.8)
+        self.assertEqual(config.ores_goodfaith_threshold, 0.6)
+        self.assertEqual(config.ores_damaging_threshold_living, 0.5)
+        self.assertEqual(config.ores_goodfaith_threshold_living, 0.75)
+
+    def test_api_configuration_rejects_invalid_ores_threshold_too_high(self):
+        url = reverse("api_configuration", args=[self.wiki.pk])
+        payload = {
+            "blocking_categories": [],
+            "auto_approved_groups": [],
+            "ores_damaging_threshold": 1.5,
+        }
+        response = self.client.put(url, data=json.dumps(payload), content_type="application/json")
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertIn("error", data)
+        self.assertIn("must be between 0.0 and 1.0", data["error"])
+
+    def test_api_configuration_rejects_invalid_ores_threshold_too_low(self):
+        url = reverse("api_configuration", args=[self.wiki.pk])
+        payload = {
+            "blocking_categories": [],
+            "auto_approved_groups": [],
+            "ores_goodfaith_threshold": -0.5,
+        }
+        response = self.client.put(url, data=json.dumps(payload), content_type="application/json")
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertIn("error", data)
+        self.assertIn("must be between 0.0 and 1.0", data["error"])
+
+    def test_api_configuration_rejects_non_numeric_ores_threshold(self):
+        url = reverse("api_configuration", args=[self.wiki.pk])
+        payload = {
+            "blocking_categories": [],
+            "auto_approved_groups": [],
+            "ores_damaging_threshold_living": "invalid",
+        }
+        response = self.client.put(url, data=json.dumps(payload), content_type="application/json")
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertIn("error", data)
+        self.assertIn("must be a valid number", data["error"])
+
+    def test_api_configuration_accepts_boundary_values(self):
+        url = reverse("api_configuration", args=[self.wiki.pk])
+        payload = {
+            "blocking_categories": [],
+            "auto_approved_groups": [],
+            "ores_damaging_threshold": 0.0,
+            "ores_goodfaith_threshold": 1.0,
+        }
+        response = self.client.put(url, data=json.dumps(payload), content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+        config = self.wiki.configuration
+        config.refresh_from_db()
+        self.assertEqual(config.ores_damaging_threshold, 0.0)
+        self.assertEqual(config.ores_goodfaith_threshold, 1.0)
+
     @mock.patch("reviews.services.pywikibot.Site")
     def test_api_autoreview_marks_bot_revision_auto_approvable(self, mock_site):
         page = PendingPage.objects.create(
