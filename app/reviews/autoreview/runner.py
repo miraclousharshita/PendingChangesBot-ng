@@ -9,7 +9,7 @@ from .utils.redirect import get_redirect_aliases
 from .utils.user import normalize_to_lookup
 
 if TYPE_CHECKING:
-    from reviews.models import EditorProfile, PendingRevision
+    from reviews.models import EditorProfile, PendingPage, PendingRevision
     from reviews.services import WikiClient
 
 
@@ -122,3 +122,54 @@ def run_single_check(
             else None
         ),
     }
+
+
+def run_autoreview_for_page(page: PendingPage) -> list[dict]:
+    """Run the configured autoreview checks for each pending revision of a page."""
+    from reviews.models import EditorProfile
+    from reviews.services import WikiClient
+
+    revisions = list(page.revisions.exclude(revid=page.stable_revid).order_by("timestamp", "revid"))
+    if not revisions:
+        return []
+
+    usernames = {rev.user_name for rev in revisions if rev.user_name}
+    profiles = (
+        {
+            profile.username: profile
+            for profile in EditorProfile.objects.filter(wiki=page.wiki, username__in=usernames)
+        }
+        if usernames
+        else {}
+    )
+
+    configuration = page.wiki.configuration
+    auto_groups = normalize_to_lookup(configuration.auto_approved_groups)
+    blocking_categories = normalize_to_lookup(configuration.blocking_categories)
+    redirect_aliases = get_redirect_aliases(page.wiki)
+    client = WikiClient(page.wiki)
+
+    results = []
+    for revision in revisions:
+        profile = profiles.get(revision.user_name or "")
+        revision_result = run_checks_pipeline(
+            revision,
+            client,
+            profile,
+            auto_groups=auto_groups,
+            blocking_categories=blocking_categories,
+            redirect_aliases=redirect_aliases,
+        )
+        results.append(
+            {
+                "revid": revision.revid,
+                "tests": revision_result["tests"],
+                "decision": {
+                    "status": revision_result["decision"].status,
+                    "label": revision_result["decision"].label,
+                    "reason": revision_result["decision"].reason,
+                },
+            }
+        )
+
+    return results

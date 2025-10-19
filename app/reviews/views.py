@@ -11,8 +11,8 @@ from django.shortcuts import get_object_or_404, render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods
 
-from .autoreview import run_autoreview_for_page
 from .autoreview.checks import AVAILABLE_CHECKS
+from .autoreview.runner import run_autoreview_for_page
 from .models import EditorProfile, PendingPage, Wiki, WikiConfiguration
 from .services import WikiClient
 
