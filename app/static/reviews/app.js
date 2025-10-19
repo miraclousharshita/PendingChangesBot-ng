@@ -155,6 +155,7 @@ createApp({
         showDiffsByPage: {}
       },
       searchQuery: "",
+      availableChecks: [],
     });
 
     const forms = reactive({
@@ -164,6 +165,7 @@ createApp({
       oresGoodfaithThreshold: 0.0,
       oresDamagingThresholdLiving: 0.0,
       oresGoodfaithThresholdLiving: 0.0,
+      enabledChecks: [],
     });
 
     const currentWiki = computed(() =>
@@ -237,7 +239,7 @@ createApp({
       localStorage.setItem('showDiffsSetting', !state.diffs.showDiffs);
     }
 
-    function syncForms() {
+    async function syncForms() {
       if (!currentWiki.value) {
         forms.blockingCategories = "";
         forms.autoApprovedGroups = "";
@@ -245,6 +247,7 @@ createApp({
         forms.oresGoodfaithThreshold = 0.0;
         forms.oresDamagingThresholdLiving = 0.0;
         forms.oresGoodfaithThresholdLiving = 0.0;
+        forms.enabledChecks = [];
         return;
       }
       forms.blockingCategories = (currentWiki.value.configuration.blocking_categories || []).join("\n");
@@ -253,6 +256,14 @@ createApp({
       forms.oresGoodfaithThreshold = currentWiki.value.configuration.ores_goodfaith_threshold || 0.0;
       forms.oresDamagingThresholdLiving = currentWiki.value.configuration.ores_damaging_threshold_living || 0.0;
       forms.oresGoodfaithThresholdLiving = currentWiki.value.configuration.ores_goodfaith_threshold_living || 0.0;
+
+      try {
+        const data = await apiRequest(`/api/wikis/${state.selectedWikiId}/checks/`);
+        forms.enabledChecks = data.enabled_checks || [];
+      } catch (error) {
+        console.error('Failed to load enabled checks:', error);
+        forms.enabledChecks = [];
+      }
     }
 
     async function apiRequest(url, options = {}) {
@@ -420,6 +431,15 @@ createApp({
         if (wikiIndex >= 0) {
           state.wikis[wikiIndex].configuration = data;
         }
+
+        await apiRequest(`/api/wikis/${state.selectedWikiId}/checks/`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ enabled_checks: forms.enabledChecks }),
+        });
+
         syncForms();
       } catch (error) {
         // Error already handled in apiRequest.
@@ -707,8 +727,19 @@ createApp({
       loadPending();
     }, { immediate: true });
 
+    async function loadAvailableChecks() {
+      try {
+        const data = await apiRequest('/api/checks/');
+        state.availableChecks = data.checks || [];
+      } catch (error) {
+        console.error('Failed to load available checks:', error);
+        state.availableChecks = [];
+      }
+    }
+
     onMounted(() => {
       syncForms();
+      loadAvailableChecks();
     });
 
     return {

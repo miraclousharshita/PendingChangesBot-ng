@@ -20,6 +20,40 @@ class WikiAdmin(admin.ModelAdmin):
 class WikiConfigurationAdmin(admin.ModelAdmin):
     list_display = ("wiki", "updated_at")
     search_fields = ("wiki__name", "wiki__code")
+    fieldsets = (
+        ("Wiki", {"fields": ("wiki",)}),
+        (
+            "Categories & Groups",
+            {"fields": ("blocking_categories", "auto_approved_groups")},
+        ),
+        (
+            "ORES Thresholds",
+            {
+                "fields": (
+                    "ores_damaging_threshold",
+                    "ores_goodfaith_threshold",
+                    "ores_damaging_threshold_living",
+                    "ores_goodfaith_threshold_living",
+                )
+            },
+        ),
+        (
+            "Check Configuration",
+            {
+                "fields": ("enabled_checks",),
+                "description": (
+                    "Select which checks to run. Leave empty to run all checks. "
+                    "Available check IDs: manual-unapproval, bot-user, blocked-user, "
+                    "auto-approved-group, article-to-redirect-conversion, blocking-categories, "
+                    "new-render-errors, invalid-isbn, superseded-additions, ores-scores"
+                ),
+            },
+        ),
+        (
+            "Other Settings",
+            {"fields": ("superseded_similarity_threshold", "redirect_aliases")},
+        ),
+    )
 
 
 @admin.register(PendingPage)
