@@ -28,7 +28,7 @@ def populate_enabled_checks(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("reviews", "0012_update_enabled_checks_default"),
+        ("reviews", "0011_add_enabled_checks"),
     ]
 
     operations = [

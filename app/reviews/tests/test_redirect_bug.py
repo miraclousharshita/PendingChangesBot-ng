@@ -28,7 +28,7 @@ class RedirectConversionTests(TestCase):
         )
         WikiConfiguration.objects.create(wiki=self.wiki)
 
-    @mock.patch("reviews.models.pywikibot.Site")
+    @mock.patch("reviews.models.pending_revision.pywikibot.Site")
     def test_article_to_redirect_conversion_should_block(self, mock_site):
         """Article-to-redirect conversion by autopatrolled user should be blocked."""
         page = PendingPage.objects.create(
@@ -178,7 +178,7 @@ Yliopistossa on kaksi pääkirjastoa, yhteensä 46 000 neliömetriä.
             "Article-to-redirect conversions should be blocked for autopatrolled-only users",
         )
 
-    @mock.patch("reviews.models.pywikibot.Site")
+    @mock.patch("reviews.models.pending_revision.pywikibot.Site")
     def test_redirect_to_redirect_edit_should_not_block(self, mock_site):
         """Redirect-to-redirect edit should not block based on this rule."""
         page = PendingPage.objects.create(
@@ -297,7 +297,7 @@ Yliopistossa on kaksi pääkirjastoa, yhteensä 46 000 neliömetriä.
         result = response.json()["results"][0]
         self.assertEqual(result["decision"]["status"], "approve")
 
-    @mock.patch("reviews.models.pywikibot.Site")
+    @mock.patch("reviews.models.pending_revision.pywikibot.Site")
     def test_article_to_redirect_by_autoreviewed_user_should_allow(self, mock_site):
         """Article-to-redirect by auto-reviewed user should allow."""
         config = self.wiki.configuration
@@ -396,7 +396,7 @@ Yliopistossa on kaksi pääkirjastoa, yhteensä 46 000 neliömetriä.
         result = response.json()["results"][0]
         self.assertEqual(result["decision"]["status"], "approve")
 
-    @mock.patch("reviews.models.pywikibot.Site")
+    @mock.patch("reviews.models.pending_revision.pywikibot.Site")
     def test_localized_redirect_keywords(self, mock_site):
         """Localized redirect keywords should be recognized."""
         page = PendingPage.objects.create(

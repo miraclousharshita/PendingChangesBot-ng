@@ -22,14 +22,18 @@ def is_addition_superseded(
     """Check if text additions from a pending revision have been superseded."""
     from reviews.models import PendingRevision as PR
 
-    latest_revision = PR.objects.filter(page=revision.page).order_by("-revid").first()
+    # If current_stable_wikitext is provided, use it; otherwise fetch the latest
+    if current_stable_wikitext:
+        latest_wikitext = current_stable_wikitext
+    else:
+        latest_revision = PR.objects.filter(page=revision.page).order_by("-revid").first()
 
-    if not latest_revision or latest_revision.revid == revision.revid:
-        return False
+        if not latest_revision or latest_revision.revid == revision.revid:
+            return False
 
-    latest_wikitext = latest_revision.get_wikitext()
-    if not latest_wikitext:
-        return False
+        latest_wikitext = latest_revision.get_wikitext()
+        if not latest_wikitext:
+            return False
 
     parent_wikitext = get_parent_wikitext(revision)
     pending_wikitext = revision.get_wikitext()

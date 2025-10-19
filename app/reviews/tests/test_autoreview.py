@@ -236,7 +236,7 @@ class AutoreviewBlockedUserTests(TestCase):
         """Clear the LRU cache before each test."""
         was_user_blocked_after.cache_clear()
 
-    @patch("reviews.services.pywikibot.Site")
+    @patch("reviews.services.wiki_client.pywikibot.Site")
     @patch("reviews.autoreview._is_bot_user")
     def test_blocked_user_not_auto_approved(self, mock_is_bot, mock_site):
         """Test that a user blocked after making an edit is NOT auto-approved."""
@@ -254,16 +254,21 @@ class AutoreviewBlockedUserTests(TestCase):
         profile = MagicMock()
         profile.usergroups = []
         profile.is_bot = False
+        profile.is_autoreviewed = False
+        profile.is_autopatrolled = False
 
         mock_wiki = MagicMock()
         mock_wiki.code = "fi"
         mock_wiki.family = "wikipedia"
+        mock_wiki.configuration = MagicMock()
+        mock_wiki.configuration.enabled_checks = None  # Run all checks
 
         revision = MagicMock()
         revision.user_name = "BlockedUser"
         revision.timestamp = datetime.fromisoformat("2024-01-15T10:00:00")
         revision.page.categories = []
         revision.page.wiki = mock_wiki
+        revision.superset_data = {}
 
         # Create a mock WikiClient - but we need the real is_user_blocked_after_edit method
         from reviews.services import WikiClient
@@ -295,9 +300,9 @@ class AutoreviewBlockedUserTests(TestCase):
 class OresScoreTests(TestCase):
     """Test ORES damaging and goodfaith score checks."""
 
-    @patch("reviews.autoreview.ModelScores.objects.create")
-    @patch("reviews.autoreview.ModelScores.objects.get")
-    @patch("reviews.autoreview.http.fetch")
+    @patch("reviews.models.ModelScores.objects.create")
+    @patch("reviews.models.ModelScores.objects.get")
+    @patch("reviews.autoreview.utils.ores.http.fetch")
     def test_ores_damaging_score_exceeds_threshold(
         self, mock_fetch, mock_model_scores_get, mock_model_scores_create
     ):
@@ -342,9 +347,9 @@ class OresScoreTests(TestCase):
         self.assertEqual(result["test"]["status"], "fail")
         self.assertIn("0.850", result["test"]["message"])
 
-    @patch("reviews.autoreview.ModelScores.objects.create")
-    @patch("reviews.autoreview.ModelScores.objects.get")
-    @patch("reviews.autoreview.http.fetch")
+    @patch("reviews.models.ModelScores.objects.create")
+    @patch("reviews.models.ModelScores.objects.get")
+    @patch("reviews.autoreview.utils.ores.http.fetch")
     def test_ores_goodfaith_score_below_threshold(
         self, mock_fetch, mock_model_scores_get, mock_model_scores_create
     ):
@@ -389,9 +394,9 @@ class OresScoreTests(TestCase):
         self.assertEqual(result["test"]["status"], "fail")
         self.assertIn("0.300", result["test"]["message"])
 
-    @patch("reviews.autoreview.ModelScores.objects.create")
-    @patch("reviews.autoreview.ModelScores.objects.get")
-    @patch("reviews.autoreview.http.fetch")
+    @patch("reviews.models.ModelScores.objects.create")
+    @patch("reviews.models.ModelScores.objects.get")
+    @patch("reviews.autoreview.utils.ores.http.fetch")
     def test_ores_scores_within_thresholds(
         self, mock_fetch, mock_model_scores_get, mock_model_scores_create
     ):
@@ -456,10 +461,10 @@ class OresScoreTests(TestCase):
         self.assertEqual(result["test"]["status"], "skip")
         self.assertIn("disabled", result["test"]["message"])
 
-    @patch("reviews.autoreview.ModelScores.objects.create")
-    @patch("reviews.autoreview.ModelScores.objects.get")
-    @patch("reviews.autoreview.http.fetch")
-    @patch("reviews.autoreview.logger")  # Mock logger to suppress error logs
+    @patch("reviews.models.ModelScores.objects.create")
+    @patch("reviews.models.ModelScores.objects.get")
+    @patch("reviews.autoreview.utils.ores.http.fetch")
+    @patch("reviews.autoreview.utils.ores.logger")  # Mock logger to suppress error logs
     def test_ores_api_error_blocks_approval(
         self, mock_logger, mock_fetch, mock_model_scores_get, mock_model_scores_create
     ):
@@ -488,9 +493,9 @@ class OresScoreTests(TestCase):
         # Verify logger.error was called
         mock_logger.error.assert_called_once()
 
-    @patch("reviews.autoreview.ModelScores.objects.create")
-    @patch("reviews.autoreview.ModelScores.objects.get")
-    @patch("reviews.autoreview.http.fetch")
+    @patch("reviews.models.ModelScores.objects.create")
+    @patch("reviews.models.ModelScores.objects.get")
+    @patch("reviews.autoreview.utils.ores.http.fetch")
     def test_ores_only_damaging_check_enabled(
         self, mock_fetch, mock_model_scores_get, mock_model_scores_create
     ):
@@ -533,9 +538,9 @@ class OresScoreTests(TestCase):
         self.assertIn("damaging: 0.050", result["test"]["message"])
         self.assertNotIn("goodfaith", result["test"]["message"])
 
-    @patch("reviews.autoreview.ModelScores.objects.create")
-    @patch("reviews.autoreview.ModelScores.objects.get")
-    @patch("reviews.autoreview.http.fetch")
+    @patch("reviews.models.ModelScores.objects.create")
+    @patch("reviews.models.ModelScores.objects.get")
+    @patch("reviews.autoreview.utils.ores.http.fetch")
     def test_ores_only_goodfaith_check_enabled(
         self, mock_fetch, mock_model_scores_get, mock_model_scores_create
     ):
@@ -579,15 +584,15 @@ class OresScoreTests(TestCase):
         self.assertNotIn("damaging", result["test"]["message"])
 
     @override_settings(ORES_DAMAGING_THRESHOLD=0.7, ORES_GOODFAITH_THRESHOLD=0.5)
-    @patch("reviews.services.pywikibot.Site")
-    @patch("reviews.autoreview.ModelScores.objects.create")
-    @patch("reviews.autoreview.ModelScores.objects.get")
-    @patch("reviews.autoreview.http.fetch")
+    @patch("reviews.services.wiki_client.pywikibot.Site")
+    @patch("reviews.models.ModelScores.objects.create")
+    @patch("reviews.models.ModelScores.objects.get")
+    @patch("reviews.autoreview.utils.ores.http.fetch")
     @patch("reviews.autoreview._is_bot_user")
-    @patch("reviews.autoreview.logger")
-    @patch("reviews.autoreview._get_parent_wikitext")
-    @patch("reviews.autoreview.PendingRevision.objects.filter")
-    @patch("reviews.autoreview.is_living_person")
+    @patch("reviews.autoreview.utils.ores.logger")
+    @patch("reviews.autoreview.utils.wikitext.get_parent_wikitext")
+    @patch("reviews.models.PendingRevision.objects.filter")
+    @patch("reviews.autoreview.utils.living_person.is_living_person_article")
     def test_ores_integration_in_evaluate_revision(
         self,
         mock_is_living,
@@ -652,6 +657,7 @@ class OresScoreTests(TestCase):
         mock_wiki = MagicMock()
         mock_wiki.code = "fi"
         mock_wiki.family = "wikipedia"
+        mock_wiki.configuration.enabled_checks = None  # Run all checks
         mock_wiki.configuration.ores_damaging_threshold = 0.7
         mock_wiki.configuration.ores_goodfaith_threshold = 0.5
 
@@ -722,7 +728,7 @@ class OresScoreTests(TestCase):
         )
 
         # Mock the ORES API response
-        with patch("reviews.autoreview.http.fetch") as mock_fetch:
+        with patch("reviews.autoreview.utils.ores.http.fetch") as mock_fetch:
             mock_response = Mock()
             mock_response.text = json.dumps(
                 {
@@ -827,8 +833,8 @@ class SupersededAdditionsTests(TestCase):
 
         # Mock parent revision
         with (
-            patch("reviews.autoreview._get_parent_wikitext") as mock_parent,
-            patch("reviews.autoreview.PendingRevision.objects.filter") as mock_filter,
+            patch("reviews.autoreview.utils.wikitext.get_parent_wikitext") as mock_parent,
+            patch("reviews.models.PendingRevision.objects.filter") as mock_filter,
         ):
             mock_parent.return_value = "Article intro. More text."
             mock_filter.return_value.order_by.return_value.first.return_value = mock_latest
@@ -857,8 +863,8 @@ class SupersededAdditionsTests(TestCase):
         mock_latest.get_wikitext.return_value = "Article text. User added info. More text."
 
         with (
-            patch("reviews.autoreview._get_parent_wikitext") as mock_parent,
-            patch("reviews.autoreview.PendingRevision.objects.filter") as mock_filter,
+            patch("reviews.autoreview.utils.wikitext.get_parent_wikitext") as mock_parent,
+            patch("reviews.models.PendingRevision.objects.filter") as mock_filter,
         ):
             mock_parent.return_value = "Article text. More text."
             mock_filter.return_value.order_by.return_value.first.return_value = mock_latest
@@ -889,8 +895,8 @@ class SupersededAdditionsTests(TestCase):
         )
 
         with (
-            patch("reviews.autoreview._get_parent_wikitext") as mock_parent,
-            patch("reviews.autoreview.PendingRevision.objects.filter") as mock_filter,
+            patch("reviews.autoreview.utils.wikitext.get_parent_wikitext") as mock_parent,
+            patch("reviews.models.PendingRevision.objects.filter") as mock_filter,
         ):
             mock_parent.return_value = "Section 1. Section 2."
             mock_filter.return_value.order_by.return_value.first.return_value = mock_latest
@@ -921,8 +927,8 @@ class SupersededAdditionsTests(TestCase):
         )
 
         with (
-            patch("reviews.autoreview._get_parent_wikitext") as mock_parent,
-            patch("reviews.autoreview.PendingRevision.objects.filter") as mock_filter,
+            patch("reviews.autoreview.utils.wikitext.get_parent_wikitext") as mock_parent,
+            patch("reviews.models.PendingRevision.objects.filter") as mock_filter,
         ):
             mock_parent.return_value = "Article text. More text."
             mock_filter.return_value.order_by.return_value.first.return_value = mock_latest
@@ -953,8 +959,8 @@ class SupersededAdditionsTests(TestCase):
         )
 
         with (
-            patch("reviews.autoreview._get_parent_wikitext") as mock_parent,
-            patch("reviews.autoreview.PendingRevision.objects.filter") as mock_filter,
+            patch("reviews.autoreview.utils.wikitext.get_parent_wikitext") as mock_parent,
+            patch("reviews.models.PendingRevision.objects.filter") as mock_filter,
         ):
             mock_parent.return_value = "Article text. More text."
             mock_filter.return_value.order_by.return_value.first.return_value = mock_latest
@@ -985,8 +991,8 @@ class SupersededAdditionsTests(TestCase):
         mock_latest.get_wikitext.return_value = "Article text. User added this content. More text."
 
         with (
-            patch("reviews.autoreview._get_parent_wikitext") as mock_parent,
-            patch("reviews.autoreview.PendingRevision.objects.filter") as mock_filter,
+            patch("reviews.autoreview.utils.wikitext.get_parent_wikitext") as mock_parent,
+            patch("reviews.models.PendingRevision.objects.filter") as mock_filter,
         ):
             mock_parent.return_value = "Article text. More text."
             mock_filter.return_value.order_by.return_value.first.return_value = mock_latest
@@ -1013,8 +1019,8 @@ class SupersededAdditionsTests(TestCase):
         mock_latest.get_wikitext.return_value = "Article text. More text."
 
         with (
-            patch("reviews.autoreview._get_parent_wikitext") as mock_parent,
-            patch("reviews.autoreview.PendingRevision.objects.filter") as mock_filter,
+            patch("reviews.autoreview.utils.wikitext.get_parent_wikitext") as mock_parent,
+            patch("reviews.models.PendingRevision.objects.filter") as mock_filter,
         ):
             mock_parent.return_value = "Article text. More text."
             mock_filter.return_value.order_by.return_value.first.return_value = mock_latest
@@ -1040,7 +1046,7 @@ class SupersededAdditionsTests(TestCase):
         mock_latest.revid = 125
         mock_latest.get_wikitext.return_value = "Different content."
 
-        with patch("reviews.autoreview.PendingRevision.objects.filter") as mock_filter:
+        with patch("reviews.models.PendingRevision.objects.filter") as mock_filter:
             mock_filter.return_value.order_by.return_value.first.return_value = mock_latest
 
             current_stable = "Different content."
@@ -1064,8 +1070,8 @@ class SupersededAdditionsTests(TestCase):
         mock_latest.get_wikitext.return_value = ""
 
         with (
-            patch("reviews.autoreview._get_parent_wikitext") as mock_parent,
-            patch("reviews.autoreview.PendingRevision.objects.filter") as mock_filter,
+            patch("reviews.autoreview.utils.wikitext.get_parent_wikitext") as mock_parent,
+            patch("reviews.models.PendingRevision.objects.filter") as mock_filter,
         ):
             mock_parent.return_value = ""
             mock_filter.return_value.order_by.return_value.first.return_value = mock_latest
@@ -1092,7 +1098,7 @@ class SupersededAdditionsTests(TestCase):
         mock_latest.revid = 123  # Same as mock_revision.revid
         mock_latest.get_wikitext.return_value = "Article text. User added this content. More text."
 
-        with patch("reviews.autoreview.PendingRevision.objects.filter") as mock_filter:
+        with patch("reviews.models.PendingRevision.objects.filter") as mock_filter:
             mock_filter.return_value.order_by.return_value.first.return_value = mock_latest
 
             current_stable = "Article text. More text."
