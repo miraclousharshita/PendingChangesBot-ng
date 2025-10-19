@@ -1,5 +1,3 @@
-"""ModelScores model."""
-
 from __future__ import annotations
 
 from django.core.validators import MaxValueValidator, MinValueValidator

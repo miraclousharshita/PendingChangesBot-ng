@@ -1,5 +1,3 @@
-"""Manual un-approval check."""
-
 from __future__ import annotations
 
 from ..base import CheckResult

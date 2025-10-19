@@ -1,5 +1,3 @@
-"""Service layer for interacting with Wikimedia projects."""
-
 from __future__ import annotations
 
 from .parsers import parse_categories, parse_superset_list, parse_superset_timestamp

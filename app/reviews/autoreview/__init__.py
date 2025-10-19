@@ -1,8 +1,9 @@
-"""Logic for simulating automatic review decisions for pending revisions."""
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+
+from reviews.models import EditorProfile
+from reviews.services import WikiClient
 
 from .decision import AutoreviewDecision
 from .runner import run_checks_pipeline, run_single_check
@@ -146,9 +147,6 @@ def _evaluate_revision(
 
 def run_autoreview_for_page(page: PendingPage) -> list[dict]:
     """Run the configured autoreview checks for each pending revision of a page."""
-    from reviews.models import EditorProfile
-    from reviews.services import WikiClient
-
     revisions = list(page.revisions.exclude(revid=page.stable_revid).order_by("timestamp", "revid"))
     if not revisions:
         return []

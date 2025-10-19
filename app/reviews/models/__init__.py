@@ -1,5 +1,3 @@
-"""Models for the reviews app."""
-
 from __future__ import annotations
 
 from .editor_profile import EditorProfile

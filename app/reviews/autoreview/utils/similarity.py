@@ -1,5 +1,3 @@
-"""Similarity detection for superseded additions."""
-
 from __future__ import annotations
 
 import logging

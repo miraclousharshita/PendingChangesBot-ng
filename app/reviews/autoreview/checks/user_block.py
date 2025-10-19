@@ -1,5 +1,3 @@
-"""User block status check."""
-
 from __future__ import annotations
 
 import logging

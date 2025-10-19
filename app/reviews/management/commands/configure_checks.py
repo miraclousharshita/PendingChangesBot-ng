@@ -1,5 +1,3 @@
-"""Management command to configure enabled checks for a wiki."""
-
 from django.core.management.base import BaseCommand, CommandError
 from reviews.autoreview.checks import AVAILABLE_CHECKS
 from reviews.models import Wiki, WikiConfiguration

@@ -1,15 +1,13 @@
-"""WikiConfiguration model."""
-
 from __future__ import annotations
 
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
+from reviews.autoreview.checks import AVAILABLE_CHECKS
+
 
 def _get_default_enabled_checks():
     """Return all available check IDs as default."""
-    from reviews.autoreview.checks import AVAILABLE_CHECKS
-
     return [check["id"] for check in AVAILABLE_CHECKS]
 
 

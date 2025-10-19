@@ -1,5 +1,3 @@
-"""Living person detection utilities."""
-
 from __future__ import annotations
 
 import logging

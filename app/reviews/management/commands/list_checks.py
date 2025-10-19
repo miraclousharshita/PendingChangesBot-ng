@@ -1,5 +1,3 @@
-"""Management command to list all available autoreview checks."""
-
 from django.core.management.base import BaseCommand
 from reviews.autoreview.checks import AVAILABLE_CHECKS
 

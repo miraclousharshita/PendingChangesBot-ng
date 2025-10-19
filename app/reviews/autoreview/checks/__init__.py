@@ -1,5 +1,3 @@
-"""Check registry for autoreview."""
-
 from __future__ import annotations
 
 from .article_to_redirect import check_article_to_redirect

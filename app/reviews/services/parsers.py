@@ -1,5 +1,3 @@
-"""Parsing utilities for wiki data."""
-
 from __future__ import annotations
 
 import logging

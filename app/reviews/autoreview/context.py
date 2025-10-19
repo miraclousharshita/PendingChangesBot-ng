@@ -1,5 +1,3 @@
-"""Check context for passing data to check functions."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass

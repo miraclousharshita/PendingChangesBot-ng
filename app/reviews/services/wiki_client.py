@@ -1,5 +1,3 @@
-"""WikiClient for interacting with Wikimedia projects."""
-
 from __future__ import annotations
 
 import logging
