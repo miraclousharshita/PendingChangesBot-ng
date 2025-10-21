@@ -1,45 +1,36 @@
-"""Service layer for interacting with Wikimedia projects via Pywikibot."""
-
 from __future__ import annotations
 
 import logging
 import os
-from dataclasses import dataclass
-from datetime import datetime, timezone
-from functools import lru_cache
+from datetime import datetime
+from typing import TYPE_CHECKING
 
-import mwparserfromhell
 import pywikibot
 from django.db import transaction
 from django.utils import timezone as dj_timezone
 from pywikibot.data.superset import SupersetQuery
 
-from .models import (
-    EditorProfile,
-    PendingPage,
-    PendingRevision,
-    ReviewStatisticsCache,
-    ReviewStatisticsMetadata,
-    Wiki,
+from .parsers import (
+    parse_optional_int,
+    parse_superset_list,
+    parse_superset_timestamp,
+    prepare_superset_metadata,
 )
+from .types import RevisionPayload
+from .user_blocks import was_user_blocked_after
+
+if TYPE_CHECKING:
+    from reviews.models import (
+        EditorProfile,
+        PendingPage,
+        PendingRevision,
+        Wiki,
+    )
 
 logger = logging.getLogger(__name__)
 
 os.environ.setdefault("PYWIKIBOT2_NO_USER_CONFIG", "1")
 os.environ.setdefault("PYWIKIBOT_NO_USER_CONFIG", "2")
-
-
-@dataclass
-class RevisionPayload:
-    revid: int
-    parentid: int | None
-    user: str | None
-    userid: int | None
-    timestamp: datetime
-    comment: str
-    sha1: str
-    tags: list[str]
-    superset_data: dict | None = None
 
 
 class WikiClient:
@@ -88,7 +79,7 @@ class WikiClient:
                         return False
 
             return False
-        except Exception:  # pragma: no cover - network failure fallback
+        except Exception:
             logger.exception(
                 "Failed to check review log for page %s, revision %s",
                 page_title,
@@ -98,12 +89,13 @@ class WikiClient:
 
     def is_user_blocked_after_edit(self, username: str, edit_timestamp: datetime) -> bool:
         """Check if user was blocked after making an edit."""
-        # Extract year from timestamp for cache efficiency
         year = edit_timestamp.year
         return was_user_blocked_after(self.wiki.code, self.wiki.family, username, year)
 
     def get_rendered_html(self, revid: int) -> str:
         """Fetch the rendered HTML for a specific revision."""
+        from reviews.models import PendingRevision
+
         if not revid:
             return ""
 
@@ -135,6 +127,7 @@ class WikiClient:
 
     def fetch_pending_pages(self, limit: int = 10000) -> list[PendingPage]:
         """Fetch the pending pages using Superset and cache them in the database."""
+        from reviews.models import PendingPage, PendingRevision
 
         limit = int(limit)
         if limit <= 0:
@@ -238,20 +231,22 @@ ORDER BY fp_pending_since, rev_id DESC
 
                 payload_entry = RevisionPayload(
                     revid=revid_int,
-                    parentid=_parse_optional_int(entry.get("rev_parent_id")),
+                    parentid=parse_optional_int(entry.get("rev_parent_id")),
                     user=entry.get("actor_name"),
-                    userid=_parse_optional_int(entry.get("actor_user")),
+                    userid=parse_optional_int(entry.get("actor_user")),
                     timestamp=superset_revision_timestamp,
                     comment=entry.get("comment_text", "") or "",
                     sha1=entry.get("rev_sha1", "") or "",
                     tags=parse_superset_list(entry.get("change_tags")),
-                    superset_data=_prepare_superset_metadata(entry),
+                    superset_data=prepare_superset_metadata(entry),
                 )
                 self._save_revision(page, payload_entry)
 
         return pages
 
     def _save_revision(self, page: PendingPage, payload: RevisionPayload) -> PendingRevision | None:
+        from reviews.models import PendingPage, PendingRevision
+
         existing_page = (
             PendingPage.objects.filter(pk=page.pk).only("id").first() if page.pk else None
         )
@@ -288,6 +283,8 @@ ORDER BY fp_pending_since, rev_id DESC
     def ensure_editor_profile(
         self, username: str, superset_data: dict | None = None
     ) -> EditorProfile:
+        from reviews.models import EditorProfile
+
         profile, created = EditorProfile.objects.get_or_create(
             wiki=self.wiki,
             username=username,
@@ -340,6 +337,8 @@ ORDER BY fp_pending_since, rev_id DESC
         Returns:
             dict: Contains 'total_records', 'oldest_timestamp', 'newest_timestamp'
         """
+        from reviews.models import ReviewStatisticsCache, ReviewStatisticsMetadata
+
         limit = int(limit)
         if limit <= 0:
             return {"total_records": 0, "oldest_timestamp": None, "newest_timestamp": None}
@@ -471,139 +470,3 @@ WHERE
         except Exception:
             logger.exception("Failed to fetch review statistics for %s", self.wiki.code)
             return {"total_records": 0, "oldest_timestamp": None, "newest_timestamp": None}
-
-
-def parse_categories(wikitext: str) -> list[str]:
-    code = mwparserfromhell.parse(wikitext or "")
-    categories: list[str] = []
-    for link in code.filter_wikilinks():
-        target = str(link.title).strip()
-        if target.lower().startswith("category:"):
-            categories.append(target.split(":", 1)[-1])
-    return sorted(set(categories))
-
-
-def parse_superset_timestamp(value: str | None) -> datetime | None:
-    if not value:
-        return None
-    normalized = value.replace("Z", "+00:00")
-    try:
-        timestamp = datetime.fromisoformat(normalized)
-    except ValueError:
-        try:
-            timestamp = datetime.fromisoformat(normalized.replace(" ", "T"))
-        except ValueError:
-            if normalized.isdigit() and len(normalized) == 14:
-                try:
-                    timestamp = datetime.strptime(normalized, "%Y%m%d%H%M%S")
-                except ValueError:
-                    logger.warning("Unable to parse Superset timestamp: %s", value)
-                    return None
-                else:
-                    timestamp = timestamp.replace(tzinfo=timezone.utc)
-            else:
-                logger.warning("Unable to parse Superset timestamp: %s", value)
-                return None
-    if timestamp.tzinfo is None:
-        timestamp = timestamp.replace(tzinfo=timezone.utc)
-    return timestamp
-
-
-def parse_superset_list(value: str | None) -> list[str]:
-    if not value:
-        return []
-    return [item.strip() for item in value.split(",") if item and item.strip()]
-
-
-def _parse_optional_int(value) -> int | None:
-    try:
-        if value is None:
-            return None
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _prepare_superset_metadata(entry: dict) -> dict:
-    metadata = dict(entry)
-    for key in (
-        "change_tags",
-        "user_groups",
-        "user_former_groups",
-        "page_categories",
-    ):
-        if key in metadata and isinstance(metadata[key], str):
-            metadata[key] = parse_superset_list(metadata[key])
-    if "actor_user" in metadata:
-        metadata["actor_user"] = _parse_optional_int(metadata.get("actor_user"))
-    if "rc_bot" in metadata:
-        metadata["rc_bot"] = _parse_superset_bool(metadata.get("rc_bot"))
-    if "rc_patrolled" in metadata:
-        metadata["rc_patrolled"] = _parse_superset_bool(metadata.get("rc_patrolled"))
-    return metadata
-
-
-def _parse_superset_bool(value) -> bool | None:
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return bool(value)
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        if normalized in {"", "null"}:
-            return None
-        if normalized in {"1", "true", "t", "yes", "y"}:
-            return True
-        if normalized in {"0", "false", "f", "no", "n"}:
-            return False
-    return bool(value)
-
-
-# Simple in-memory cache using Python's built-in LRU cache
-@lru_cache(maxsize=1000)
-def was_user_blocked_after(code: str, family: str, username: str, year: int) -> bool:
-    """
-    Check if user was blocked after a specific year.
-    Uses @lru_cache for automatic caching.
-
-    Timestamp precision is reduced to year to improve cache hit rate,
-    since exact accuracy isn't required for this check.
-
-    Args:
-        code: Wiki code (e.g., "fi")
-        family: Wiki family (e.g., "wikipedia")
-        username: Username to check
-        year: Year to check blocks after
-
-    Returns:
-        True if user was blocked after the given year
-    """
-    try:
-        site = pywikibot.Site(code, family)
-        # Create timestamp for start of year
-        timestamp = pywikibot.Timestamp(year, 1, 1, 0, 0, 0)
-
-        # Get block events after the timestamp
-        # reverse=True means enumerate forward from start timestamp
-        block_events = site.logevents(
-            logtype="block",
-            page=f"User:{username}",
-            start=timestamp,
-            reverse=True,
-            total=1,  # Only need to find one block event
-        )
-
-        # Check if any 'block' action exists
-        for event in block_events:
-            if event.action() == "block":
-                return True
-
-        return False
-
-    except Exception as e:
-        logger.error(f"Error checking blocks for {username}: {e}")
-        # Fail safe: assume NOT blocked if we can't verify
-        # This prevents breaking existing functionality when the API is unavailable
-        return False
