@@ -441,6 +441,7 @@ createApp({
         });
 
         syncForms();
+        state.configurationOpen = false;
       } catch (error) {
         // Error already handled in apiRequest.
       }
