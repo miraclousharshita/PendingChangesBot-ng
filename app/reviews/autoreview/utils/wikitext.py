@@ -53,13 +53,18 @@ def extract_additions(parent_wikitext: str, pending_wikitext: str) -> list[str]:
 
 def get_parent_wikitext(revision: PendingRevision) -> str:
     """Get parent revision wikitext from local database."""
-    if not revision.parentid:
+    cached_parent = getattr(revision, "parent_wikitext", None)
+    if isinstance(cached_parent, str) and cached_parent:
+        return cached_parent
+
+    parentid = getattr(revision, "parentid", None)
+    if not isinstance(parentid, (int, str)) or not parentid:
         return ""
 
     try:
         from reviews.models import PendingRevision as PR
 
-        parent_revision = PR.objects.get(page=revision.page, revid=revision.parentid)
+        parent_revision = PR.objects.get(page=revision.page, revid=parentid)
         return parent_revision.get_wikitext()
     except Exception:
         logger.warning(

@@ -16,7 +16,7 @@ def is_addition_superseded(
     revision: PendingRevision,
     current_stable_wikitext: str,
     threshold: float,
-) -> bool:
+) -> dict[str, object]:
     """Check if text additions from a pending revision have been superseded."""
     from reviews.models import PendingRevision as PR
 
@@ -27,30 +27,53 @@ def is_addition_superseded(
         latest_revision = PR.objects.filter(page=revision.page).order_by("-revid").first()
 
         if not latest_revision or latest_revision.revid == revision.revid:
-            return False
+            return {
+                "is_superseded": False,
+                "message": "No stable revision available for comparison.",
+            }
 
         latest_wikitext = latest_revision.get_wikitext()
         if not latest_wikitext:
-            return False
+            return {
+                "is_superseded": False,
+                "message": "Stable revision wikitext is empty.",
+            }
 
     parent_wikitext = get_parent_wikitext(revision)
-    pending_wikitext = revision.get_wikitext()
+
+    pending_wikitext_getter = getattr(revision, "get_wikitext", None)
+    if callable(pending_wikitext_getter):
+        pending_wikitext = pending_wikitext_getter()
+    else:
+        pending_wikitext = getattr(revision, "wikitext", "")
+
+    if not isinstance(pending_wikitext, str):
+        pending_wikitext = getattr(revision, "wikitext", "") if isinstance(
+            getattr(revision, "wikitext", ""), str
+        ) else str(pending_wikitext or "")
+
     if not pending_wikitext:
-        return False
+        return {
+            "is_superseded": False,
+            "message": "Pending revision has no wikitext to compare.",
+        }
 
     additions = extract_additions(parent_wikitext, pending_wikitext)
     if not additions:
-        return False
+        return {
+            "is_superseded": False,
+            "message": "No additions detected in pending revision.",
+        }
 
     normalized_latest = normalize_wikitext(latest_wikitext)
     if not normalized_latest:
-        return False
+        return {
+            "is_superseded": False,
+            "message": "Unable to normalize latest stable wikitext.",
+        }
 
     for addition in additions:
         normalized_addition = normalize_wikitext(addition)
-
-        if len(normalized_addition) < 20:
-            continue
 
         matcher = SequenceMatcher(None, normalized_addition, normalized_latest)
         significant_match_length = sum(
@@ -69,6 +92,14 @@ def is_addition_superseded(
                     match_ratio * 100,
                     threshold * 100,
                 )
-                return True
+                return {
+                    "is_superseded": True,
+                    "message": (
+                        "Addition appears superseded: similarity below threshold."
+                    ),
+                }
 
-    return False
+    return {
+        "is_superseded": False,
+        "message": "Additions still present or insufficient similarity drop detected.",
+    }

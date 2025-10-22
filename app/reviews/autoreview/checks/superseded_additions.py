@@ -19,35 +19,37 @@ def check_superseded_additions(context: CheckContext) -> CheckResult:
             page=context.revision.page, revid=context.revision.page.stable_revid
         ).first()
 
+        result_message = "Stable revision not found."
+
         if stable_revision:
             current_stable_wikitext = stable_revision.get_wikitext()
             threshold = context.revision.page.wiki.configuration.superseded_similarity_threshold
 
-            if is_addition_superseded(context.revision, current_stable_wikitext, threshold):
+            result = is_addition_superseded(
+                context.revision, current_stable_wikitext, threshold
+            )
+
+            if result["is_superseded"]:
                 return CheckResult(
                     check_id="superseded-additions",
                     check_title="Superseded additions",
                     status="ok",
-                    message=(
-                        "The additions from this revision have been superseded "
-                        "or removed in the latest version."
-                    ),
+                    message=result["message"],
                     decision=AutoreviewDecision(
                         status="approve",
                         label="Would be auto-approved",
-                        reason=(
-                            "The additions from this revision have been superseded "
-                            "or removed in the latest version."
-                        ),
+                        reason=result["message"],
                     ),
                     should_stop=True,
                 )
+
+            result_message = result["message"]
 
         return CheckResult(
             check_id="superseded-additions",
             check_title="Superseded additions",
             status="not_ok",
-            message="The additions from this revision are still relevant.",
+            message=result_message,
         )
     except Exception as e:
         logger.error(
