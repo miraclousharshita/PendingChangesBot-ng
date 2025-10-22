@@ -1,12 +1,12 @@
 """Tests for superseded additions check."""
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from django.test import TestCase
 
-from reviews.autoreview.utils.wikitext import normalize_wikitext, extract_additions
 from reviews.autoreview.utils.similarity import is_addition_superseded
+from reviews.autoreview.utils.wikitext import extract_additions, normalize_wikitext
 
 
 class SupersededAdditionsTests(TestCase):

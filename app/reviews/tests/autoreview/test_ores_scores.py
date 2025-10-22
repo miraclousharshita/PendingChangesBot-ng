@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import timedelta
 from unittest.mock import MagicMock, Mock, patch
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 from reviews.autoreview.checks.ores_scores import check_ores_scores
 from reviews.autoreview.context import CheckContext
@@ -15,16 +15,28 @@ class OresScoreTests(TestCase):
     """Test ORES damaging and goodfaith score checks."""
 
     def _create_context(self, revision, damaging_threshold=0.7, goodfaith_threshold=0.5):
-        """Helper to create CheckContext for tests."""
-        # Mock WikiConfiguration
-        mock_config = MagicMock()
-        mock_config.ores_damaging_threshold = damaging_threshold
-        mock_config.ores_goodfaith_threshold = goodfaith_threshold
-        mock_config.ores_damaging_threshold_living = 0.1
-        mock_config.ores_goodfaith_threshold_living = 0.9
-        
-        revision.page.wiki.configuration = mock_config
-        
+        wiki = revision.page.wiki
+
+        if hasattr(wiki, "_state") and not wiki._state.adding:
+            from reviews.models import WikiConfiguration
+
+            config, _ = WikiConfiguration.objects.get_or_create(wiki=wiki)
+            config.ores_damaging_threshold = damaging_threshold
+            config.ores_goodfaith_threshold = goodfaith_threshold
+            config.ores_damaging_threshold_living = 0.1
+            config.ores_goodfaith_threshold_living = 0.9
+            config.save()
+
+            wiki_configuration = config
+        else:
+            wiki_configuration = MagicMock()
+            wiki_configuration.ores_damaging_threshold = damaging_threshold
+            wiki_configuration.ores_goodfaith_threshold = goodfaith_threshold
+            wiki_configuration.ores_damaging_threshold_living = 0.1
+            wiki_configuration.ores_goodfaith_threshold_living = 0.9
+
+        revision.page.wiki.configuration = wiki_configuration
+
         return CheckContext(
             revision=revision,
             client=MagicMock(),
@@ -70,8 +82,9 @@ class OresScoreTests(TestCase):
         mock_revision.revid = 12345
         mock_revision.page.wiki.code = "fi"
         mock_revision.page.wiki.family = "wikipedia"
-        
-        context = self._create_context(mock_revision, damaging_threshold=0.7, goodfaith_threshold=0.0)
+
+        context = self._create_context(
+                      mock_revision, damaging_threshold=0.7, goodfaith_threshold=0.0)
         result = check_ores_scores(context)
 
         self.assertEqual(result.status, "fail")
@@ -114,8 +127,9 @@ class OresScoreTests(TestCase):
         mock_revision.revid = 12345
         mock_revision.page.wiki.code = "fi"
         mock_revision.page.wiki.family = "wikipedia"
-        
-        context = self._create_context(mock_revision, damaging_threshold=0.0, goodfaith_threshold=0.5)
+
+        context = self._create_context(
+                      mock_revision, damaging_threshold=0.0, goodfaith_threshold=0.5)
         result = check_ores_scores(context)
 
         self.assertEqual(result.status, "fail")
@@ -164,8 +178,9 @@ class OresScoreTests(TestCase):
         mock_revision.revid = 12345
         mock_revision.page.wiki.code = "fi"
         mock_revision.page.wiki.family = "wikipedia"
-        
-        context = self._create_context(mock_revision, damaging_threshold=0.7, goodfaith_threshold=0.5)
+
+        context = self._create_context(
+                      mock_revision, damaging_threshold=0.7, goodfaith_threshold=0.5)
         result = check_ores_scores(context)
 
         self.assertEqual(result.status, "pass")
@@ -175,8 +190,12 @@ class OresScoreTests(TestCase):
         """Test that ORES checks are skipped when thresholds are 0.0."""
         mock_revision = MagicMock()
         mock_revision.page.wiki.code = "fi"
-        
-        context = self._create_context(mock_revision, damaging_threshold=0.0, goodfaith_threshold=0.0)
+        mock_revision.revid = 12345
+        mock_revision.page.wiki.code = "fi"
+        mock_revision.page.wiki.family = "wikipedia"
+
+        context = self._create_context(
+                      mock_revision, damaging_threshold=0.0, goodfaith_threshold=0.0)
         result = check_ores_scores(context)
 
         self.assertEqual(result.status, "skip")
@@ -198,17 +217,21 @@ class OresScoreTests(TestCase):
             name="Finnish Wikipedia",
             api_endpoint="https://fi.wikipedia.org/w/api.php",
         )
-        
+
         page = PendingPage.objects.create(
             wiki=wiki,
             pageid=123,
             title="Test Page",
+            stable_revid=12340,
+
         )
-        
+
         revision = PendingRevision.objects.create(
             revid=12345,
             page=page,
             comment="Test edit",
+            timestamp="2025-10-10 01:01:01Z",
+            age_at_fetch = timedelta(hours=4),
         )
 
         # First call - no cache
