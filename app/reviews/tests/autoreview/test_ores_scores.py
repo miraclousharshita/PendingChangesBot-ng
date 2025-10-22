@@ -46,11 +46,12 @@ class OresScoreTests(TestCase):
             redirect_aliases=[]
         )
 
+    @patch("reviews.autoreview.utils.living_person.is_living_person", return_value=False)
     @patch("reviews.models.ModelScores.objects.create")
     @patch("reviews.models.ModelScores.objects.get")
     @patch("reviews.autoreview.utils.ores.http.fetch")
     def test_ores_damaging_score_exceeds_threshold(
-        self, mock_fetch, mock_model_scores_get, mock_model_scores_create
+        self, mock_fetch, mock_model_scores_get, mock_model_scores_create, mock_is_living_person
     ):
         """Test that high damaging score blocks auto-approval."""
         from reviews.models import ModelScores
@@ -91,11 +92,12 @@ class OresScoreTests(TestCase):
         self.assertEqual(result.decision.status, "blocked")
         self.assertIn("0.850", result.message)
 
+    @patch("reviews.autoreview.utils.living_person.is_living_person", return_value=False)
     @patch("reviews.models.ModelScores.objects.create")
     @patch("reviews.models.ModelScores.objects.get")
     @patch("reviews.autoreview.utils.ores.http.fetch")
     def test_ores_goodfaith_score_below_threshold(
-        self, mock_fetch, mock_model_scores_get, mock_model_scores_create
+        self, mock_fetch, mock_model_scores_get, mock_model_scores_create, mock_is_living_person
     ):
         """Test that low goodfaith score blocks auto-approval."""
         from reviews.models import ModelScores
@@ -136,11 +138,12 @@ class OresScoreTests(TestCase):
         self.assertEqual(result.decision.status, "blocked")
         self.assertIn("0.250", result.message)
 
+    @patch("reviews.autoreview.utils.living_person.is_living_person", return_value=False)
     @patch("reviews.models.ModelScores.objects.create")
     @patch("reviews.models.ModelScores.objects.get")
     @patch("reviews.autoreview.utils.ores.http.fetch")
     def test_ores_scores_within_thresholds(
-        self, mock_fetch, mock_model_scores_get, mock_model_scores_create
+        self, mock_fetch, mock_model_scores_get, mock_model_scores_create, mock_is_living_person
     ):
         """Test that good scores pass the check."""
         from reviews.models import ModelScores
@@ -183,11 +186,13 @@ class OresScoreTests(TestCase):
                       mock_revision, damaging_threshold=0.7, goodfaith_threshold=0.5)
         result = check_ores_scores(context)
 
-        self.assertEqual(result.status, "pass")
+        self.assertEqual(result.status, "ok")
         self.assertIsNone(result.decision)
 
-    def test_ores_checks_disabled_when_thresholds_zero(self):
+    @patch("reviews.autoreview.utils.living_person.is_living_person", return_value=False)
+    def test_ores_checks_disabled_when_thresholds_zero(self, mock_is_living_person):
         """Test that ORES checks are skipped when thresholds are 0.0."""
+
         mock_revision = MagicMock()
         mock_revision.page.wiki.code = "fi"
         mock_revision.revid = 12345
@@ -201,11 +206,12 @@ class OresScoreTests(TestCase):
         self.assertEqual(result.status, "skip")
         self.assertIn("disabled", result.message)
 
+    @patch("reviews.autoreview.utils.living_person.is_living_person", return_value=False)
     @patch("reviews.models.ModelScores.objects.create")
     @patch("reviews.models.ModelScores.objects.get")
     @patch("reviews.autoreview.utils.ores.http.fetch")
     def test_ores_scores_are_cached(
-        self, mock_fetch, mock_model_scores_get, mock_model_scores_create
+        self, mock_fetch, mock_model_scores_get, mock_model_scores_create, mock_is_living_person
     ):
         """Test that ORES scores are cached in the database after fetching."""
         from reviews.models import ModelScores, PendingPage, PendingRevision, Wiki
@@ -269,4 +275,4 @@ class OresScoreTests(TestCase):
 
         # Verify cache was created
         self.assertTrue(mock_model_scores_create.called)
-        self.assertEqual(result1.status, "pass")
+        self.assertEqual(result1.status, "ok")
