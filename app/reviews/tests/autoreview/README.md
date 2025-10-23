@@ -7,7 +7,7 @@ This directory contains organized test files for individual autoreview checks, s
 Each check has its own dedicated test file:
 
 - **`test_invalid_isbn.py`** - Tests for ISBN validation and detection
-  - ISBN-10 and ISBN-13 checksum validation  
+  - ISBN-10 and ISBN-13 checksum validation
   - ISBN detection in wikitext
   - Invalid ISBN flagging
 
@@ -73,4 +73,3 @@ When adding a new autoreview check, create a corresponding test file following t
 - Check implementations: `app/reviews/autoreview/checks/`
 - Utility functions: `app/reviews/autoreview/utils/`
 - Original monolithic test file: `app/reviews/tests/test_autoreview.py` (kept for backward compatibility)
-
