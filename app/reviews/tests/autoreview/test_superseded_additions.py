@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
@@ -164,7 +164,8 @@ class SupersededAdditionsTests(TestCase):
         self.assertEqual(result.decision.status, "approve")
         self.assertTrue(result.should_stop)
 
-    def test_check_superseded_additions_exception_handling(self):
+    @patch("reviews.autoreview.checks.superseded_additions.logger")
+    def test_check_superseded_additions_exception_handling(self, mock_logger):
         """Test check_superseded_additions handles exceptions gracefully."""
         from reviews.autoreview.checks.superseded_additions import check_superseded_additions
         from reviews.autoreview.context import CheckContext

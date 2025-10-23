@@ -281,12 +281,18 @@ class OresScoreTests(TestCase):
         self.assertTrue(mock_model_scores_create.called)
         self.assertEqual(result1.status, "ok")
 
+    @patch("reviews.autoreview.utils.ores.logger")
     @patch("reviews.autoreview.utils.living_person.is_living_person", return_value=False)
     @patch("reviews.models.ModelScores.objects.create")
     @patch("reviews.models.ModelScores.objects.get")
     @patch("reviews.autoreview.utils.ores.http.fetch")
     def test_ores_scores_api_error_fails(
-        self, mock_fetch, mock_model_scores_get, mock_model_scores_create, mock_is_living_person
+        self,
+        mock_fetch,
+        mock_model_scores_get,
+        mock_model_scores_create,
+        mock_is_living_person,
+        mock_logger,
     ):
         """Test that when ORES API fails, check fails."""
         from reviews.models import ModelScores

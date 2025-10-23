@@ -77,7 +77,8 @@ class AutoreviewBlockedUserTests(TestCase):
         # Verify logevents was called with correct parameters
         mock_site_instance.logevents.assert_called_once()
 
-    def test_blocked_user_check_handles_exception(self):
+    @patch("reviews.autoreview.checks.user_block.logger")
+    def test_blocked_user_check_handles_exception(self, mock_logger):
         """Test that user block check handles exceptions gracefully."""
         mock_wiki = MagicMock()
         mock_wiki.code = "en"

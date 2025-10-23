@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import timezone
+from unittest.mock import patch
 
 from django.test import TestCase
 
@@ -43,11 +44,13 @@ class ParsersTests(TestCase):
         self.assertEqual(result.day, 1)
         self.assertEqual(result.hour, 12)
 
-    def test_parse_superset_timestamp_invalid_14_digit(self):
+    @patch("reviews.services.parsers.logger")
+    def test_parse_superset_timestamp_invalid_14_digit(self, mock_logger):
         result = parse_superset_timestamp("99999999999999")
         self.assertIsNone(result)
 
-    def test_parse_superset_timestamp_invalid_format(self):
+    @patch("reviews.services.parsers.logger")
+    def test_parse_superset_timestamp_invalid_format(self, mock_logger):
         result = parse_superset_timestamp("invalid-timestamp")
         self.assertIsNone(result)
 

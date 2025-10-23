@@ -14,8 +14,9 @@ class UserBlocksTests(TestCase):
         result = was_user_blocked_after("en", "wikipedia", "TestUser", 2024)
         self.assertFalse(result)
 
+    @mock.patch("reviews.services.user_blocks.logger")
     @mock.patch("reviews.services.user_blocks.pywikibot.Site")
-    def test_was_user_blocked_after_exception(self, mock_site):
+    def test_was_user_blocked_after_exception(self, mock_site, mock_logger):
         mock_site.side_effect = Exception("API error")
         result = was_user_blocked_after("en", "wikipedia", "TestUser", 2024)
         self.assertFalse(result)
