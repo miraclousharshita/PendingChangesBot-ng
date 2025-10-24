@@ -280,3 +280,39 @@ class OresScoreTests(TestCase):
         # Verify cache was created
         self.assertTrue(mock_model_scores_create.called)
         self.assertEqual(result1.status, "ok")
+
+    @patch("reviews.autoreview.utils.ores.logger")
+    @patch("reviews.autoreview.utils.living_person.is_living_person", return_value=False)
+    @patch("reviews.models.ModelScores.objects.create")
+    @patch("reviews.models.ModelScores.objects.get")
+    @patch("reviews.autoreview.utils.ores.http.fetch")
+    def test_ores_scores_api_error_fails(
+        self,
+        mock_fetch,
+        mock_model_scores_get,
+        mock_model_scores_create,
+        mock_is_living_person,
+        mock_logger,
+    ):
+        """Test that when ORES API fails, check fails."""
+        from reviews.models import ModelScores
+
+        mock_model_scores_get.side_effect = ModelScores.DoesNotExist()
+        mock_model_scores_create.return_value = MagicMock()
+
+        # Simulate ORES API error
+        mock_fetch.side_effect = Exception("API error")
+
+        mock_revision = MagicMock()
+        mock_revision.revid = 12345
+        mock_revision.page.wiki.code = "fi"
+        mock_revision.page.wiki.family = "wikipedia"
+
+        context = self._create_context(
+            mock_revision, damaging_threshold=0.7, goodfaith_threshold=0.5
+        )
+        result = check_ores_scores(context)
+
+        self.assertEqual(result.status, "fail")
+        self.assertEqual(result.decision.status, "blocked")
+        self.assertIn("Could not verify", result.message)
