@@ -235,12 +235,14 @@ class ViewTests(TestCase):
 
         url = reverse("api_configuration", args=[self.wiki.pk])
         # Properly encode form data with repeated keys for lists
-        form_data = urlencode([
-            ("blocking_categories", "Foo"),
-            ("blocking_categories", "Bar"),
-            ("auto_approved_groups", "sysop"),
-            ("auto_approved_groups", "steward"),
-        ])
+        form_data = urlencode(
+            [
+                ("blocking_categories", "Foo"),
+                ("blocking_categories", "Bar"),
+                ("auto_approved_groups", "sysop"),
+                ("auto_approved_groups", "steward"),
+            ]
+        )
         response = self.client.put(
             url,
             data=form_data,
@@ -1254,17 +1256,17 @@ class ViewTests(TestCase):
 
     @mock.patch("reviews.views.WikiClient")
     def test_api_statistics_refresh_with_limit(self, mock_client):
-        """Test api_statistics_refresh with custom limit."""
-        mock_client.return_value.fetch_review_statistics.return_value = {
+        """Test api_statistics_refresh (now incremental refresh)."""
+        mock_client.return_value.refresh_review_statistics.return_value = {
             "total_records": 100,
             "oldest_timestamp": datetime.now(timezone.utc) - timedelta(days=30),
             "newest_timestamp": datetime.now(timezone.utc),
+            "is_incremental": True,
         }
 
-        response = self.client.post(
-            reverse("api_statistics_refresh", args=[self.wiki.pk]), {"limit": "100"}
-        )
+        response = self.client.post(reverse("api_statistics_refresh", args=[self.wiki.pk]))
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["total_records"], 100)
-        mock_client.return_value.fetch_review_statistics.assert_called_once_with(limit=100)
+        self.assertEqual(data["is_incremental"], True)
+        mock_client.return_value.refresh_review_statistics.assert_called_once()
