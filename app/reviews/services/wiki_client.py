@@ -364,19 +364,14 @@ ORDER BY fp_pending_since, rev_id DESC
             return False
 
         try:
-            request = self.site.simple_request(
-                action="query",
-                list="exturlusage",
-                euprotocol="http",
-                euquery=domain,
-                eunamespace=0,
-                eulimit=1,
-                formatversion=2,
+            ext_url_usage = self.site.exturlusage(
+                url=domain, protocol="http", namespaces=[0], total=1
             )
-            response = request.submit()
-            pages = response.get("query", {}).get("exturlusage", [])
 
-            return len(pages) > 0
+            for _ in ext_url_usage:
+                return True
+
+            return False
         except Exception:
             logger.exception("Failed to check domain usage for: %s", domain)
             return False

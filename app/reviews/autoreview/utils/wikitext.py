@@ -52,7 +52,7 @@ def extract_additions(parent_wikitext: str, pending_wikitext: str) -> list[str]:
 
 
 def get_parent_wikitext(revision: PendingRevision) -> str:
-    """Get parent revision wikitext from local database."""
+    """Get parent revision wikitext from local database or API."""
     cached_parent = getattr(revision, "parent_wikitext", None)
     if isinstance(cached_parent, str) and cached_parent:
         return cached_parent
@@ -67,12 +67,42 @@ def get_parent_wikitext(revision: PendingRevision) -> str:
         parent_revision = PR.objects.get(page=revision.page, revid=parentid)
         return parent_revision.get_wikitext()
     except Exception:
-        logger.warning(
-            "Parent revision %s not found in local database for revision %s",
+        logger.info(
+            "Parent revision %s not in local database, fetching from API for revision %s",
             revision.parentid,
             revision.revid,
         )
-        return ""
+        try:
+            import pywikibot
+
+            wiki = revision.page.wiki
+            site = pywikibot.Site(code=wiki.code, fam=wiki.family)
+            request = site.simple_request(
+                action="query",
+                prop="revisions",
+                revids=str(parentid),
+                rvprop="content",
+                rvslots="main",
+                formatversion=2,
+            )
+            response = request.submit()
+            pages = response.get("query", {}).get("pages", [])
+
+            if pages and len(pages) > 0:
+                revisions = pages[0].get("revisions", [])
+                if revisions and len(revisions) > 0:
+                    slots = revisions[0].get("slots", {})
+                    main_slot = slots.get("main", {})
+                    content = main_slot.get("content", "")
+                    if content:
+                        logger.info("Fetched parent revision %s from API", parentid)
+                        return content
+
+            logger.warning("Could not fetch parent revision %s from API", parentid)
+            return ""
+        except Exception as e:
+            logger.exception("Error fetching parent revision %s from API: %s", parentid, e)
+            return ""
 
 
 def extract_references(text: str) -> list[str]:
@@ -81,10 +111,10 @@ def extract_references(text: str) -> list[str]:
         return []
 
     references = []
-    ref_pattern = r"<ref[^/>]*>.*?</ref>"
-    references.extend(re.findall(ref_pattern, text, flags=re.DOTALL | re.IGNORECASE))
-    self_closing_pattern = r"<ref[^>]*/>"
-    references.extend(re.findall(self_closing_pattern, text, flags=re.IGNORECASE))
+    ref_pattern = r"<ref(?:\s+[^>]*)?>(?:.*?)</ref>|<ref(?:\s+[^>]*)?/>"
+
+    for match in re.finditer(ref_pattern, text, re.IGNORECASE | re.DOTALL):
+        references.append(match.group(0))
 
     return references
 
@@ -94,10 +124,10 @@ def strip_references(text: str) -> str:
     if not text:
         return ""
 
-    text = re.sub(r"<ref[^/>]*>.*?</ref>", "", text, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r"<ref[^>]*/>\s*", "", text, flags=re.IGNORECASE)
+    ref_pattern = r"<ref(?:\s+[^>]*)?>(?:.*?)</ref>|<ref(?:\s+[^>]*)?/>"
+    cleaned = re.sub(ref_pattern, "", text, flags=re.IGNORECASE | re.DOTALL)
 
-    return text
+    return cleaned
 
 
 def is_reference_only_edit(parent_wikitext: str, pending_wikitext: str) -> bool:
@@ -129,11 +159,13 @@ def is_reference_only_edit(parent_wikitext: str, pending_wikitext: str) -> bool:
 def extract_urls_from_references(references: list[str]) -> list[str]:
     """Extract all URLs from reference tags."""
     urls = []
-    url_pattern = r"https?://[^\s<>\"\'\]\|]+"
+    url_pattern = r'https?://[^\s\]<>"\'\|\{\}]+(?:\([^\s\)]*\))?'
 
     for ref in references:
-        found_urls = re.findall(url_pattern, ref, flags=re.IGNORECASE)
-        urls.extend(found_urls)
+        for match in re.finditer(url_pattern, ref, re.IGNORECASE):
+            url = match.group(0)
+            url = url.rstrip(".,;:!?}")
+            urls.append(url)
 
     return urls
 
