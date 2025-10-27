@@ -7,7 +7,6 @@ from ..context import CheckContext
 from ..decision import AutoreviewDecision
 from ..utils.wikitext import (
     extract_domain_from_url,
-    extract_references,
     extract_urls_from_references,
     get_parent_wikitext,
     is_reference_only_edit,
@@ -21,7 +20,11 @@ def check_reference_only_edit(context: CheckContext) -> CheckResult:
     pending_wikitext = context.revision.get_wikitext()
     parent_wikitext = get_parent_wikitext(context.revision)
 
-    if not is_reference_only_edit(parent_wikitext, pending_wikitext):
+    is_ref_only, has_removals, new_or_modified_refs = is_reference_only_edit(
+        parent_wikitext, pending_wikitext
+    )
+
+    if not is_ref_only:
         return CheckResult(
             check_id="reference-only-edit",
             check_title="Reference-only edit detection",
@@ -29,9 +32,19 @@ def check_reference_only_edit(context: CheckContext) -> CheckResult:
             message="Edit modifies content beyond references.",
         )
 
-    parent_refs = set(extract_references(parent_wikitext or ""))
-    pending_refs = set(extract_references(pending_wikitext))
-    new_or_modified_refs = [ref for ref in pending_refs if ref not in parent_refs]
+    if has_removals and not new_or_modified_refs:
+        return CheckResult(
+            check_id="reference-only-edit",
+            check_title="Reference-only edit detection",
+            status="not_ok",
+            message="Edit only removes references without adding new ones.",
+            decision=AutoreviewDecision(
+                status="manual",
+                label="Requires manual review",
+                reason="Reference-only edits that only remove references require manual review.",
+            ),
+            should_stop=True,
+        )
 
     if not new_or_modified_refs:
         return CheckResult(

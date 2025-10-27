@@ -130,10 +130,19 @@ def strip_references(text: str) -> str:
     return cleaned
 
 
-def is_reference_only_edit(parent_wikitext: str, pending_wikitext: str) -> bool:
-    """Check if edit only modifies references without changing other content."""
+def is_reference_only_edit(
+    parent_wikitext: str, pending_wikitext: str
+) -> tuple[bool, bool, list[str]]:
+    """Check if edit only modifies references without changing other content.
+
+    Returns:
+        tuple: (is_reference_only, has_removals, added_or_modified_refs)
+            - is_reference_only: True if only references changed
+            - has_removals: True if any references were removed
+            - added_or_modified_refs: List of new/modified reference content
+    """
     if not pending_wikitext:
-        return False
+        return False, False, []
 
     parent_without_refs = strip_references(parent_wikitext or "")
     pending_without_refs = strip_references(pending_wikitext)
@@ -142,18 +151,21 @@ def is_reference_only_edit(parent_wikitext: str, pending_wikitext: str) -> bool:
     pending_normalized = re.sub(r"\s+", " ", pending_without_refs).strip()
 
     if parent_normalized != pending_normalized:
-        return False
+        return False, False, []
 
-    parent_refs = extract_references(parent_wikitext or "")
-    pending_refs = extract_references(pending_wikitext)
-
-    if parent_refs and not pending_refs:
-        return False
+    parent_refs = set(extract_references(parent_wikitext or ""))
+    pending_refs = set(extract_references(pending_wikitext))
 
     if not parent_refs and not pending_refs:
-        return False
+        return False, False, []
 
-    return True
+    has_removals = len(parent_refs - pending_refs) > 0
+    added_or_modified = list(pending_refs - parent_refs)
+
+    if not added_or_modified and not has_removals:
+        return False, False, []
+
+    return True, has_removals, added_or_modified
 
 
 def extract_urls_from_references(references: list[str]) -> list[str]:

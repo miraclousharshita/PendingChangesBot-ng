@@ -75,27 +75,40 @@ class WikitextUtilityTests(TestCase):
     def test_is_reference_only_edit_adding_reference(self):
         parent = "Some article text here."
         pending = "Some article text here.<ref>New citation</ref>"
-        self.assertTrue(is_reference_only_edit(parent, pending))
+        is_ref_only, has_removals, added = is_reference_only_edit(parent, pending)
+        self.assertTrue(is_ref_only)
+        self.assertFalse(has_removals)
+        self.assertEqual(len(added), 1)
 
     def test_is_reference_only_edit_modifying_reference(self):
         parent = "Text <ref>Old citation</ref> more text"
         pending = "Text <ref>New citation</ref> more text"
-        self.assertTrue(is_reference_only_edit(parent, pending))
+        is_ref_only, has_removals, added = is_reference_only_edit(parent, pending)
+        self.assertTrue(is_ref_only)
+        self.assertTrue(has_removals)
+        self.assertEqual(len(added), 1)
 
     def test_is_reference_only_edit_changing_content(self):
         parent = "Original text <ref>Citation</ref>"
         pending = "Modified text <ref>Citation</ref>"
-        self.assertFalse(is_reference_only_edit(parent, pending))
+        is_ref_only, has_removals, added = is_reference_only_edit(parent, pending)
+        self.assertFalse(is_ref_only)
 
     def test_is_reference_only_edit_removing_reference(self):
         parent = "Text <ref>Citation</ref> more text"
         pending = "Text  more text"
-        self.assertFalse(is_reference_only_edit(parent, pending))
+        is_ref_only, has_removals, added = is_reference_only_edit(parent, pending)
+        self.assertTrue(is_ref_only)
+        self.assertTrue(has_removals)
+        self.assertEqual(len(added), 0)
 
     def test_is_reference_only_edit_replacing_reference(self):
         parent = "Text <ref>Old citation</ref> more text"
         pending = "Text <ref>New citation</ref> more text"
-        self.assertTrue(is_reference_only_edit(parent, pending))
+        is_ref_only, has_removals, added = is_reference_only_edit(parent, pending)
+        self.assertTrue(is_ref_only)
+        self.assertTrue(has_removals)
+        self.assertEqual(len(added), 1)
 
 
 class ReferenceOnlyEditCheckTests(TestCase):
@@ -269,8 +282,9 @@ class ReferenceOnlyEditCheckTests(TestCase):
         )
 
         result = check_reference_only_edit(context)
-        self.assertEqual(result.status, "skip")
-        self.assertIn("beyond references", result.message.lower())
+        self.assertEqual(result.status, "not_ok")
+        self.assertEqual(result.decision.status, "manual")
+        self.assertIn("only removes references", result.message.lower())
 
     def test_mixed_content_and_reference_changes(self):
         parent_wikitext = "Original content <ref>Citation</ref>"
@@ -408,6 +422,49 @@ class ReferenceOnlyEditCheckTests(TestCase):
         pending_wikitext = "Text <ref>New source</ref> more text"
 
         revision = self._create_revision(113, 100, pending_wikitext, parent_wikitext)
+
+        mock_client = MagicMock()
+
+        context = CheckContext(
+            revision=revision,
+            client=mock_client,
+            profile=None,
+            auto_groups={},
+            blocking_categories={},
+            redirect_aliases=[],
+        )
+
+        result = check_reference_only_edit(context)
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.decision.status, "approve")
+
+    def test_partial_reference_removal(self):
+        parent_wikitext = "Text.<ref>Ref1</ref> More.<ref>Ref2</ref> End.<ref>Ref3</ref>"
+        pending_wikitext = "Text.<ref>Ref1</ref> More. End.<ref>Ref3</ref>"
+
+        revision = self._create_revision(114, 100, pending_wikitext, parent_wikitext)
+
+        mock_client = MagicMock()
+
+        context = CheckContext(
+            revision=revision,
+            client=mock_client,
+            profile=None,
+            auto_groups={},
+            blocking_categories={},
+            redirect_aliases=[],
+        )
+
+        result = check_reference_only_edit(context)
+        self.assertEqual(result.status, "not_ok")
+        self.assertEqual(result.decision.status, "manual")
+        self.assertIn("only removes references", result.message.lower())
+
+    def test_adding_and_modifying_references_together(self):
+        parent_wikitext = "Text. More."
+        pending_wikitext = "Text.<ref>New ref 1</ref> More.<ref>New ref 2</ref>"
+
+        revision = self._create_revision(115, 100, pending_wikitext, parent_wikitext)
 
         mock_client = MagicMock()
 
