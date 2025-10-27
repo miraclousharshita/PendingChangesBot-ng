@@ -1,1 +1,1 @@
-usernames["meta"]["meta"] = "Harshita 2208"
+usernames["meta"]["meta"] = "WIKIMEDIA_USERNAME"
