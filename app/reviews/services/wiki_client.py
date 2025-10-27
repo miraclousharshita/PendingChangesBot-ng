@@ -357,3 +357,26 @@ ORDER BY fp_pending_since, rev_id DESC
         """
         stats_client = StatisticsClient(wiki=self.wiki, site=self.site)
         return stats_client.fetch_all_statistics(days=days, clear_existing=True)
+
+    def has_domain_been_used(self, domain: str) -> bool:
+        """Check if domain has been used in Wikipedia articles (namespace=0)."""
+        if not domain:
+            return False
+
+        try:
+            request = self.site.simple_request(
+                action="query",
+                list="exturlusage",
+                euprotocol="http",
+                euquery=domain,
+                eunamespace=0,
+                eulimit=1,
+                formatversion=2,
+            )
+            response = request.submit()
+            pages = response.get("query", {}).get("exturlusage", [])
+
+            return len(pages) > 0
+        except Exception:
+            logger.exception("Failed to check domain usage for: %s", domain)
+            return False

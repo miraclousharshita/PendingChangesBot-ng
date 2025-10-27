@@ -73,3 +73,83 @@ def get_parent_wikitext(revision: PendingRevision) -> str:
             revision.revid,
         )
         return ""
+
+
+def extract_references(text: str) -> list[str]:
+    """Extract all reference tags from wikitext."""
+    if not text:
+        return []
+
+    references = []
+    ref_pattern = r"<ref[^/>]*>.*?</ref>"
+    references.extend(re.findall(ref_pattern, text, flags=re.DOTALL | re.IGNORECASE))
+    self_closing_pattern = r"<ref[^>]*/>"
+    references.extend(re.findall(self_closing_pattern, text, flags=re.IGNORECASE))
+
+    return references
+
+
+def strip_references(text: str) -> str:
+    """Remove all reference tags from wikitext."""
+    if not text:
+        return ""
+
+    text = re.sub(r"<ref[^/>]*>.*?</ref>", "", text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"<ref[^>]*/>\s*", "", text, flags=re.IGNORECASE)
+
+    return text
+
+
+def is_reference_only_edit(parent_wikitext: str, pending_wikitext: str) -> bool:
+    """Check if edit only modifies references without changing other content."""
+    if not pending_wikitext:
+        return False
+
+    parent_without_refs = strip_references(parent_wikitext or "")
+    pending_without_refs = strip_references(pending_wikitext)
+
+    parent_normalized = re.sub(r"\s+", " ", parent_without_refs).strip()
+    pending_normalized = re.sub(r"\s+", " ", pending_without_refs).strip()
+
+    if parent_normalized != pending_normalized:
+        return False
+
+    parent_refs = extract_references(parent_wikitext or "")
+    pending_refs = extract_references(pending_wikitext)
+
+    if parent_refs and not pending_refs:
+        return False
+
+    if not parent_refs and not pending_refs:
+        return False
+
+    return True
+
+
+def extract_urls_from_references(references: list[str]) -> list[str]:
+    """Extract all URLs from reference tags."""
+    urls = []
+    url_pattern = r"https?://[^\s<>\"\'\]\|]+"
+
+    for ref in references:
+        found_urls = re.findall(url_pattern, ref, flags=re.IGNORECASE)
+        urls.extend(found_urls)
+
+    return urls
+
+
+def extract_domain_from_url(url: str) -> str | None:
+    """Extract domain from URL without protocol, path, or query string."""
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(url)
+        domain = parsed.netloc.lower()
+
+        if domain.startswith("www."):
+            domain = domain[4:]
+
+        return domain if domain else None
+    except Exception:
+        logger.warning("Failed to parse URL: %s", url)
+        return None
