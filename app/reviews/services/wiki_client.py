@@ -364,9 +364,7 @@ ORDER BY fp_pending_since, rev_id DESC
             return False
 
         try:
-            ext_url_usage = self.site.exturlusage(
-                url=domain, protocol="http", namespaces=[0], total=1
-            )
+            ext_url_usage = self.site.exturlusage(url=domain, namespaces=[0], total=1)
 
             for _ in ext_url_usage:
                 return True
