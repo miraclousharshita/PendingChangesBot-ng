@@ -84,12 +84,15 @@ def check_reference_only_edit(context: CheckContext) -> CheckResult:
     new_domains = []
     checked_domains = set()
 
+    # Get the page ID to exclude from domain usage search (avoid self-matches)
+    page_id = context.revision.page.pageid if hasattr(context.revision.page, "pageid") else None
+
     for domain in domains:
         if domain in checked_domains:
             continue
         checked_domains.add(domain)
 
-        has_been_used = context.client.has_domain_been_used(domain)
+        has_been_used = context.client.has_domain_been_used(domain, exclude_page_id=page_id)
 
         if not has_been_used:
             new_domains.append(domain)

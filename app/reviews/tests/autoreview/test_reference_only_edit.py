@@ -195,7 +195,7 @@ class ReferenceOnlyEditCheckTests(TestCase):
         self.assertEqual(result.status, "ok")
         self.assertEqual(result.decision.status, "approve")
         self.assertTrue(result.should_stop)
-        mock_client.has_domain_been_used.assert_called_once_with("example.com")
+        mock_client.has_domain_been_used.assert_called_once_with("example.com", exclude_page_id=1)
 
     def test_adding_reference_with_new_domain(self):
         parent_wikitext = "Article content."
