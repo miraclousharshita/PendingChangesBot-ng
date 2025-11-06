@@ -111,9 +111,13 @@ def extract_references(text: str) -> list[str]:
         return []
 
     references = []
-    ref_pattern = r"<ref(?:\s+[^>]*)?>(?:.*?)</ref>|<ref(?:\s+[^>]*)?/>"
 
-    for match in re.finditer(ref_pattern, text, re.IGNORECASE | re.DOTALL):
+    # Extract self-closing refs
+    for match in re.finditer(r"<ref[^>]*/>", text, re.IGNORECASE):
+        references.append(match.group(0))
+
+    # Extract paired refs (excluding self-closing)
+    for match in re.finditer(r"<ref(?:(?!/>)[^>])*>(?:.*?)</ref>", text, re.IGNORECASE | re.DOTALL):
         references.append(match.group(0))
 
     return references
@@ -124,10 +128,14 @@ def strip_references(text: str) -> str:
     if not text:
         return ""
 
-    ref_pattern = r"<ref(?:\s+[^>]*)?>(?:.*?)</ref>|<ref(?:\s+[^>]*)?/>"
-    cleaned = re.sub(ref_pattern, "", text, flags=re.IGNORECASE | re.DOTALL)
+    # First remove self-closing ref tags: <ref ... />
+    text = re.sub(r"<ref[^>]*/>", "", text, flags=re.IGNORECASE)
 
-    return cleaned
+    # Then remove paired ref tags: <ref ...>content</ref>
+    # The opening tag must NOT end with />, so we use a negative lookahead
+    text = re.sub(r"<ref(?:(?!/>)[^>])*>(?:.*?)</ref>", "", text, flags=re.IGNORECASE | re.DOTALL)
+
+    return text
 
 
 def is_reference_only_edit(
@@ -147,8 +155,10 @@ def is_reference_only_edit(
     parent_without_refs = strip_references(parent_wikitext or "")
     pending_without_refs = strip_references(pending_wikitext)
 
-    parent_normalized = re.sub(r"\s+", " ", parent_without_refs).strip()
-    pending_normalized = re.sub(r"\s+", " ", pending_without_refs).strip()
+    # Don't normalize whitespace too aggressively - preserve structure
+    # Only collapse consecutive spaces/tabs on the same line
+    parent_normalized = re.sub(r"[ \t]+", " ", parent_without_refs).strip()
+    pending_normalized = re.sub(r"[ \t]+", " ", pending_without_refs).strip()
 
     if parent_normalized != pending_normalized:
         return False, False, []
