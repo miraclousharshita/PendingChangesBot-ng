@@ -1,0 +1,1057 @@
+openapi: 3.0.3
+info:
+  title: PendingChangesBot API
+  description: |
+    PendingChangesBot is a Django application that inspects pending changes on Wikimedia
+    projects using the Flagged Revisions API. It fetches the 50 oldest pending pages for a
+    selected wiki, caches their pending revisions together with editor metadata, and exposes a
+    Vue.js interface for reviewing the results.
+
+    ## Features
+    - Manage multiple Wikimedia wikis
+    - Fetch and cache pending changes from wikis
+    - Review statistics and analytics
+    - Auto-review functionality with configurable checks
+    - FlaggedRevs statistics tracking
+  version: 1.0.0
+  contact:
+    name: Wikimedia Suomi
+    url: https://github.com/Wikimedia-Suomi/PendingChangesBot-ng
+  license:
+    name: MIT
+    url: https://github.com/Wikimedia-Suomi/PendingChangesBot-ng/blob/main/LICENSE
+
+servers:
+  - url: http://127.0.0.1:8000
+    description: Local development server
+  - url: http://localhost:8000
+    description: Local development server (alternative)
+
+tags:
+  - name: Wikis
+    description: Wiki management and configuration
+  - name: Pending Changes
+    description: Operations related to pending changes and revisions
+  - name: Review Statistics
+    description: Statistics and analytics for reviews
+  - name: FlaggedRevs Statistics
+    description: FlaggedRevs extension statistics
+  - name: Autoreview
+    description: Automated review checks and configuration
+  - name: Configuration
+    description: Wiki configuration management
+
+paths:
+  /api/wikis/:
+    get:
+      tags:
+        - Wikis
+      summary: List all wikis
+      description: Retrieve a list of all configured Wikimedia wikis with their configurations
+      operationId: getWikis
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  wikis:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Wiki'
+
+  /api/wikis/{wiki_id}/refresh/:
+    post:
+      tags:
+        - Pending Changes
+      summary: Refresh pending changes for a wiki
+      description: Fetches the latest pending changes from the specified wiki
+      operationId: refreshPendingChanges
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+      responses:
+        '200':
+          description: Successfully refreshed pending changes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pages:
+                    type: array
+                    items:
+                      type: integer
+                    description: List of page IDs that were refreshed
+        '502':
+          description: Bad Gateway - Failed to fetch from wiki API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/wikis/{wiki_id}/pending/:
+    get:
+      tags:
+        - Pending Changes
+      summary: Get pending pages for a wiki
+      description: Retrieve all pending pages with their revisions for the specified wiki
+      operationId: getPendingPages
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pages:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PendingPage'
+
+  /api/wikis/{wiki_id}/pages/{page_id}/revisions/:
+    get:
+      tags:
+        - Pending Changes
+      summary: Get revisions for a specific page
+      description: Retrieve all revisions for a specific page in a wiki
+      operationId: getPageRevisions
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+        - $ref: '#/components/parameters/PageId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pageid:
+                    type: integer
+                  revisions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Revision'
+        '404':
+          description: Page not found
+
+  /api/wikis/{wiki_id}/pages/{page_id}/autoreview/:
+    post:
+      tags:
+        - Autoreview
+      summary: Run autoreview checks on a page
+      description: Execute configured autoreview checks for the specified page
+      operationId: runAutoreview
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+        - $ref: '#/components/parameters/PageId'
+      responses:
+        '200':
+          description: Autoreview completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pageid:
+                    type: integer
+                  title:
+                    type: string
+                  mode:
+                    type: string
+                    example: dry-run
+                  results:
+                    type: object
+                    description: Results of autoreview checks
+        '404':
+          description: Page not found
+
+  /api/wikis/{wiki_id}/clear/:
+    post:
+      tags:
+        - Pending Changes
+      summary: Clear cached pending pages
+      description: Delete all cached pending pages for the specified wiki
+      operationId: clearCache
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+      responses:
+        '200':
+          description: Cache cleared successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cleared:
+                    type: integer
+                    description: Number of pages cleared from cache
+
+  /api/wikis/{wiki_id}/configuration/:
+    get:
+      tags:
+        - Configuration
+      summary: Get wiki configuration
+      description: Retrieve the configuration settings for a specific wiki
+      operationId: getWikiConfiguration
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WikiConfiguration'
+
+    put:
+      tags:
+        - Configuration
+      summary: Update wiki configuration
+      description: Update configuration settings for a specific wiki
+      operationId: updateWikiConfiguration
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WikiConfigurationInput'
+      responses:
+        '200':
+          description: Configuration updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WikiConfiguration'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/checks/:
+    get:
+      tags:
+        - Autoreview
+      summary: List all available autoreview checks
+      description: Retrieve a list of all available autoreview checks with their metadata
+      operationId: getAvailableChecks
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  checks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AutoreviewCheck'
+
+  /api/wikis/{wiki_id}/checks/:
+    get:
+      tags:
+        - Autoreview
+      summary: Get enabled checks for a wiki
+      description: Retrieve the list of enabled autoreview checks for a specific wiki
+      operationId: getEnabledChecks
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled_checks:
+                    type: array
+                    items:
+                      type: string
+                    description: List of enabled check IDs
+                  all_checks:
+                    type: array
+                    items:
+                      type: string
+                    description: List of all available check IDs
+
+    put:
+      tags:
+        - Autoreview
+      summary: Update enabled checks for a wiki
+      description: Update the list of enabled autoreview checks for a specific wiki
+      operationId: updateEnabledChecks
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled_checks:
+                  type: array
+                  items:
+                    type: string
+                  description: List of check IDs to enable
+      responses:
+        '200':
+          description: Enabled checks updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled_checks:
+                    type: array
+                    items:
+                      type: string
+                  all_checks:
+                    type: array
+                    items:
+                      type: string
+        '400':
+          description: Invalid check IDs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/wikis/fetch-diff/:
+    get:
+      tags:
+        - Pending Changes
+      summary: Fetch diff content
+      description: Fetch and cache diff content from a URL
+      operationId: fetchDiff
+      parameters:
+        - name: url
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: URL to fetch diff content from
+      responses:
+        '200':
+          description: Successful response
+          content:
+            text/html:
+              schema:
+                type: string
+        '400':
+          description: Missing URL parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Failed to fetch diff
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/wikis/{wiki_id}/statistics/:
+    get:
+      tags:
+        - Review Statistics
+      summary: Get review statistics for a wiki
+      description: Retrieve cached review statistics with optional filtering
+      operationId: getStatistics
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+        - name: reviewer
+          in: query
+          schema:
+            type: string
+          description: Filter by reviewer username
+        - name: reviewed_user
+          in: query
+          schema:
+            type: string
+          description: Filter by reviewed user username
+        - name: time_filter
+          in: query
+          schema:
+            type: string
+            enum: [all, day, week]
+            default: all
+          description: Time filter for statistics
+        - name: exclude_auto_reviewers
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Exclude auto-reviewers from statistics
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+          description: Maximum number of records to return
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewStatistics'
+
+  /api/wikis/{wiki_id}/statistics/charts/:
+    get:
+      tags:
+        - Review Statistics
+      summary: Get chart data for review statistics
+      description: Retrieve aggregated data for visualization charts
+      operationId: getStatisticsCharts
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+        - name: time_filter
+          in: query
+          schema:
+            type: string
+            enum: [all, day, week]
+            default: all
+        - name: exclude_auto_reviewers
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatisticsCharts'
+
+  /api/wikis/{wiki_id}/statistics/refresh/:
+    post:
+      tags:
+        - Review Statistics
+      summary: Incrementally refresh review statistics
+      description: Fetch only new review statistics data since last refresh
+      operationId: refreshStatistics
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+      responses:
+        '200':
+          description: Statistics refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatisticsRefreshResult'
+        '502':
+          description: Failed to refresh statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/wikis/{wiki_id}/statistics/clear/:
+    post:
+      tags:
+        - Review Statistics
+      summary: Clear and reload statistics
+      description: Clear statistics cache and reload fresh data for specified number of days
+      operationId: clearAndReloadStatistics
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                days:
+                  type: integer
+                  minimum: 1
+                  maximum: 365
+                  default: 30
+                  description: Number of days to reload
+      responses:
+        '200':
+          description: Statistics cleared and reloaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatisticsClearResult'
+        '400':
+          description: Invalid days parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Failed to reload statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/flaggedrevs-statistics/:
+    get:
+      tags:
+        - FlaggedRevs Statistics
+      summary: Get FlaggedRevs statistics
+      description: Retrieve FlaggedRevs extension statistics with optional filtering
+      operationId: getFlaggedRevsStatistics
+      parameters:
+        - name: wiki
+          in: query
+          schema:
+            type: string
+          description: Filter by wiki code
+        - name: series
+          in: query
+          schema:
+            type: string
+            enum: [totalPages_ns0, syncedPages_ns0, reviewedPages_ns0, pendingLag_average, pendingChanges]
+          description: Specific data series to return
+        - name: start_date
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Start date filter (YYYY-MM-DD)
+        - name: end_date
+          in: query
+          schema:
+            type: string
+            format: date
+          description: End date filter (YYYY-MM-DD)
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FlaggedRevsStatistic'
+
+  /api/flaggedrevs-statistics/available-months/:
+    get:
+      tags:
+        - FlaggedRevs Statistics
+      summary: Get available months for FlaggedRevs statistics
+      description: Retrieve list of months that have FlaggedRevs statistics data
+      operationId: getFlaggedRevsMonths
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  months:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        value:
+                          type: string
+                          example: "202411"
+                        label:
+                          type: string
+                          example: "202411"
+
+  /api/flaggedrevs-activity/:
+    get:
+      tags:
+        - FlaggedRevs Statistics
+      summary: Get FlaggedRevs review activity
+      description: Retrieve review activity data for FlaggedRevs
+      operationId: getFlaggedRevsActivity
+      parameters:
+        - name: wiki
+          in: query
+          schema:
+            type: string
+          description: Filter by wiki code
+        - name: start_date
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Start date filter (YYYY-MM-DD)
+        - name: end_date
+          in: query
+          schema:
+            type: string
+            format: date
+          description: End date filter (YYYY-MM-DD)
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ReviewActivity'
+
+components:
+  parameters:
+    WikiId:
+      name: wiki_id
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: The unique identifier of the wiki
+
+    PageId:
+      name: page_id
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: The unique identifier of the page
+
+  schemas:
+    Wiki:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Unique identifier for the wiki
+        name:
+          type: string
+          description: Display name of the wiki
+          example: "Finnish Wikipedia"
+        code:
+          type: string
+          description: Wiki language/project code
+          example: "fi"
+        api_endpoint:
+          type: string
+          format: uri
+          description: MediaWiki API endpoint URL
+          example: "https://fi.wikipedia.org/w/api.php"
+        configuration:
+          $ref: '#/components/schemas/WikiConfiguration'
+
+    WikiConfiguration:
+      type: object
+      properties:
+        blocking_categories:
+          type: array
+          items:
+            type: string
+          description: Categories that block auto-approval
+          example: ["Living people", "BLP"]
+        auto_approved_groups:
+          type: array
+          items:
+            type: string
+          description: User groups that are auto-approved
+          example: ["autoreviewer", "sysop"]
+        ores_damaging_threshold:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          description: ORES damaging score threshold
+          example: 0.5
+        ores_goodfaith_threshold:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          description: ORES goodfaith score threshold
+          example: 0.5
+        ores_damaging_threshold_living:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          description: ORES damaging threshold for living person articles
+          example: 0.3
+        ores_goodfaith_threshold_living:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          description: ORES goodfaith threshold for living person articles
+          example: 0.7
+
+    WikiConfigurationInput:
+      type: object
+      properties:
+        blocking_categories:
+          type: array
+          items:
+            type: string
+        auto_approved_groups:
+          type: array
+          items:
+            type: string
+        ores_damaging_threshold:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+        ores_goodfaith_threshold:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+        ores_damaging_threshold_living:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+        ores_goodfaith_threshold_living:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+
+    PendingPage:
+      type: object
+      properties:
+        pageid:
+          type: integer
+          description: Unique page identifier
+        title:
+          type: string
+          description: Page title
+        pending_since:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp when page became pending
+        stable_revid:
+          type: integer
+          description: ID of the stable (reviewed) revision
+        revisions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Revision'
+
+    Revision:
+      type: object
+      properties:
+        revid:
+          type: integer
+          description: Unique revision identifier
+        parentid:
+          type: integer
+          description: Parent revision ID
+        timestamp:
+          type: string
+          format: date-time
+          description: Revision timestamp
+        age_seconds:
+          type: integer
+          description: Age of revision in seconds at fetch time
+        user_name:
+          type: string
+          description: Username of the editor
+        change_tags:
+          type: array
+          items:
+            type: string
+          description: Tags associated with the change
+        comment:
+          type: string
+          description: Edit summary/comment
+        categories:
+          type: array
+          items:
+            type: string
+          description: Page categories at time of revision
+        sha1:
+          type: string
+          description: SHA1 hash of revision content
+        editor_profile:
+          $ref: '#/components/schemas/EditorProfile'
+
+    EditorProfile:
+      type: object
+      properties:
+        usergroups:
+          type: array
+          items:
+            type: string
+          description: User groups the editor belongs to
+        is_blocked:
+          type: boolean
+          description: Whether the user is currently blocked
+        is_bot:
+          type: boolean
+          description: Whether the user is a bot
+        is_autopatrolled:
+          type: boolean
+          description: Whether the user has autopatrol rights
+        is_autoreviewed:
+          type: boolean
+          description: Whether the user has autoreview rights
+
+    AutoreviewCheck:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique check identifier
+        name:
+          type: string
+          description: Display name of the check
+        priority:
+          type: integer
+          description: Execution priority (lower runs first)
+
+    ReviewStatistics:
+      type: object
+      properties:
+        metadata:
+          $ref: '#/components/schemas/StatisticsMetadata'
+        top_reviewers:
+          type: array
+          items:
+            type: object
+            properties:
+              reviewer_name:
+                type: string
+              review_count:
+                type: integer
+        top_reviewed_users:
+          type: array
+          items:
+            type: object
+            properties:
+              reviewed_user_name:
+                type: string
+              review_count:
+                type: integer
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewRecord'
+
+    StatisticsMetadata:
+      type: object
+      properties:
+        last_refreshed_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_data_loaded_at:
+          type: string
+          format: date-time
+          nullable: true
+        total_records:
+          type: integer
+        oldest_review_timestamp:
+          type: string
+          format: date-time
+          nullable: true
+        newest_review_timestamp:
+          type: string
+          format: date-time
+          nullable: true
+
+    ReviewRecord:
+      type: object
+      properties:
+        reviewer_name:
+          type: string
+        reviewed_user_name:
+          type: string
+        page_title:
+          type: string
+        page_id:
+          type: integer
+        reviewed_revision_id:
+          type: integer
+        pending_revision_id:
+          type: integer
+        reviewed_timestamp:
+          type: string
+          format: date-time
+        pending_timestamp:
+          type: string
+          format: date-time
+        review_delay_days:
+          type: number
+          format: float
+          description: Delay in days between pending and review
+
+    StatisticsCharts:
+      type: object
+      properties:
+        reviewers_over_time:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+              count:
+                type: integer
+        pending_reviews_per_day:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+              count:
+                type: integer
+        average_delay_over_time:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+              avg_delay:
+                type: number
+                format: float
+        delay_percentiles:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+              p10:
+                type: number
+                format: float
+              p50:
+                type: number
+                format: float
+              p90:
+                type: number
+                format: float
+        overall_stats:
+          type: object
+          properties:
+            avg_delay:
+              type: number
+              format: float
+            p10:
+              type: number
+              format: float
+            p50:
+              type: number
+              format: float
+            p90:
+              type: number
+              format: float
+            total_reviews:
+              type: integer
+            unique_reviewers:
+              type: integer
+
+    StatisticsRefreshResult:
+      type: object
+      properties:
+        total_records:
+          type: integer
+        oldest_timestamp:
+          type: string
+          format: date-time
+          nullable: true
+        newest_timestamp:
+          type: string
+          format: date-time
+          nullable: true
+        is_incremental:
+          type: boolean
+        batches_fetched:
+          type: integer
+        batch_limit_reached:
+          type: boolean
+
+    StatisticsClearResult:
+      type: object
+      properties:
+        total_records:
+          type: integer
+        oldest_timestamp:
+          type: string
+          format: date-time
+          nullable: true
+        newest_timestamp:
+          type: string
+          format: date-time
+          nullable: true
+        batches_fetched:
+          type: integer
+        batch_limit_reached:
+          type: boolean
+        days:
+          type: integer
+
+    FlaggedRevsStatistic:
+      type: object
+      properties:
+        wiki:
+          type: string
+          description: Wiki code
+        date:
+          type: string
+          format: date
+        totalPages_ns0:
+          type: integer
+          description: Total pages in main namespace
+        syncedPages_ns0:
+          type: integer
+          description: Synced pages in main namespace
+        reviewedPages_ns0:
+          type: integer
+          description: Reviewed pages in main namespace
+        pendingLag_average:
+          type: number
+          format: float
+          description: Average pending lag
+        pendingChanges:
+          type: integer
+          description: Number of pending changes
+
+    ReviewActivity:
+      type: object
+      properties:
+        wiki:
+          type: string
+          description: Wiki code
+        date:
+          type: string
+          format: date
+        number_of_reviewers:
+          type: integer
+        number_of_reviews:
+          type: integer
+        number_of_pages:
+          type: integer
+        reviews_per_reviewer:
+          type: number
+          format: float
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
