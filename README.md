@@ -53,7 +53,7 @@ Vue.js interface for reviewing the results.
    pip3 install --upgrade pip
    pip3 install -r requirements.txt
    ```
-   
+
 6. **Install pre-commit hooks** (recommended for contributors)
    ```bash
    pre-commit install
@@ -70,7 +70,7 @@ Vue.js interface for reviewing the results.
    ```bash
    python manage.py runserver
    ```
-   
+
    You can install Sublime Text packages for Python linting and formatting to complement pre-commit hooks.
 
    Troubleshooting Tips
@@ -78,7 +78,7 @@ Vue.js interface for reviewing the results.
    ```bash
    source .venv/Scripts/activate
    ```
-   
+
    pip errors: If installing dependencies fails, ensure your pip is upgraded:
 
    ```bash
@@ -181,6 +181,15 @@ python3 manage.py runserver
 
 Open <http://127.0.0.1:8000/> in your browser to use the interface. JSON endpoints are
 available under `/api/wikis/<wiki_id>/…`, for example `/api/wikis/1/pending/`.
+
+### API Documentation
+
+Interactive API documentation is available via Swagger UI:
+
+- **Swagger UI**: <http://127.0.0.1:8000/swagger/> - Interactive API explorer
+- **ReDoc**: <http://127.0.0.1:8000/redoc/> - Alternative documentation view
+
+For detailed API documentation, see [docs/API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md).
 
 ## Running unit tests
 
